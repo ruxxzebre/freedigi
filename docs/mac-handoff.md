@@ -30,9 +30,14 @@ bash ~/Applications/update.sh
 
 The updater downloads the latest installer over SSH from `nesko@chaiky.dev`
 (an optional first argument overrides the SSH destination), verifies the source
-bundle checksum, creates a fresh checkout under `~/Developer`, runs the Mac
-build/tests, installs and opens the app. SSH access to that server is required.
-Existing source checkouts and app settings are preserved. Updates are manual;
+bundle checksum, fast-forwards its existing checkout, runs the Mac build/tests,
+installs and opens the app. SSH access to that server is required.
+The source location is remembered in `~/Library/Application Support/ControlLab/source-directory`.
+On migration, it can adopt the clean checkout matching the installed app's source
+revision, keeping its `.build` directory at the same absolute path. Otherwise it
+starts at `~/Developer/ControlLab-Updates`. Local edits, changed branches and
+divergent commits stop the update instead of being overwritten. A second installer
+argument can select a new, unused source directory. App settings are preserved. Updates are manual;
 the script never force-quits the app or performs controller firmware updates.
 Logs are in `~/Library/Logs/ControlLab/update.log` and the new checkout's
 `build/install.log`. Packaging also places a copy of `update.sh` in `build/`.
@@ -41,7 +46,8 @@ The icon's editable source is `Resources/ControlLab.svg`; the checked-in PNG and
 multi-resolution ICNS are bundled before code signing, so Mac builds do not need
 an image conversion tool.
 
-The script runs all tests, builds the release CLI, packages both GUI executables
+The script builds the app, preview, CLI and tests in one release build, runs the
+already-built tests with `--skip-build`, then packages both GUI executables
 and SDL, and verifies the app's ad-hoc signature. It needs no Windows installer,
 decompilation tools, Go, Node, or research directory. Default signing does not
 include Apple's restricted virtual-device entitlement. A Developer ID alone
@@ -49,6 +55,13 @@ does not grant it; `ENABLE_VIRTUAL_HID=1` requires an approved provisioning prof
 
 The checked-in GitHub Actions workflow runs the same Mac build on a hosted runner.
 It does not exercise USB hardware.
+
+Updates retain Swift's `.build` cache and use one configuration, avoiding the
+previous fresh checkout and separate debug-test/release-app builds. Optimized
+Swift may still rebuild an entire changed module; toolchain/SDK changes can also
+invalidate caches. No Mac speedup has been measured here. For local development,
+`CONFIGURATION=debug ./scripts/build-mac.sh` is available; normal updates remain
+optimized release builds. Tests and signature verification remain enabled.
 
 ## First device checks
 

@@ -19,14 +19,14 @@ if [[ "${ENABLE_VIRTUAL_HID:-0}" == "1" ]]; then
         exit 1
     fi
 fi
-swift_build_args=(-c "${configuration}" --product ControlLab)
-preview_build_args=(-c "${configuration}" --product ControlLabRGBPreview)
-if [[ "${SWIFTPM_DISABLE_SANDBOX:-0}" == "1" ]]; then
-    swift_build_args+=(--disable-sandbox)
-    preview_build_args+=(--disable-sandbox)
+if [[ "${CONTROLLAB_SKIP_BUILD:-0}" != "1" ]]; then
+    swift_build_args=(-c "${configuration}")
+    if [[ "${SWIFTPM_DISABLE_SANDBOX:-0}" == "1" ]]; then
+        swift_build_args+=(--disable-sandbox)
+    fi
+    swift build "${swift_build_args[@]}"
 fi
-swift build "${swift_build_args[@]}"
-swift build "${preview_build_args[@]}"
+[[ -x "${binary}" && -x "${preview_binary}" ]] || { print -u2 "App binaries are missing. Run ./scripts/build-mac.sh."; exit 1; }
 rm -rf "${app_dir}"
 mkdir -p "${app_dir}/Contents/MacOS" "${app_dir}/Contents/Resources/ThirdPartyNotices" \
     "${app_dir}/Contents/Frameworks"
