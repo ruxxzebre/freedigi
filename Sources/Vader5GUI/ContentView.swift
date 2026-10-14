@@ -136,7 +136,7 @@ struct ContentView: View {
                 .disabled(model.isRunning || model.transport == .bluetooth)
 
                 Button { model.toggle() } label: {
-                    Label(model.isRunning ? "Disconnect" : "Connect device",
+                    Label(model.isRunning ? "Disconnect" : (model.monitoringPaused ? "Resume monitoring" : "Connect device"),
                           systemImage: model.isRunning ? "stop.fill" : "bolt.fill")
                         .frame(maxWidth: .infinity)
                 }
@@ -166,7 +166,7 @@ struct ContentView: View {
                 StatusPill(text: "Bluetooth", icon: "antenna.radiowaves.left.and.right")
             }
             StatusPill(
-                text: model.isRunning ? "ONLINE" : "OFFLINE",
+                text: model.isRunning ? "ONLINE" : (model.monitoringPaused ? "PAUSED" : "OFFLINE"),
                 icon: model.isRunning ? "checkmark.circle.fill" : "circle.dashed",
                 tint: model.isRunning ? .green : .secondary)
         }

@@ -44,6 +44,7 @@ final class BridgeViewModel: ObservableObject {
     @Published var isReadingDock = false
     @Published var isApplyingLighting = false
     @Published var deviceBusy = false
+    @Published var monitoringPaused = false
     @Published var dryRun = true {
         didSet { ControllerDiagnostics.shared.record("Execution mode", mode: executionMode, message: dryRun ? "Writes will be previewed; reads and monitoring remain live." : "Hardware writes enabled.") }
     }
@@ -89,7 +90,7 @@ final class BridgeViewModel: ObservableObject {
 
     var statusTitle: String {
         switch status {
-        case .stopped: "Disconnected"
+        case .stopped: monitoringPaused ? "Monitoring paused" : "Disconnected"
         case .connecting: "Connecting…"
         case .running(.monitor): transport == .bluetooth ? "Bluetooth connected" : "Monitoring"
         case .running(.virtualGamepad): "Gamepad active"
@@ -99,6 +100,7 @@ final class BridgeViewModel: ObservableObject {
 
     func toggle() {
         guard !operationInProgress else { return }
+        monitoringPaused = false
         errorMessage = nil
         ControllerDiagnostics.shared.record("Input bridge request", message: "Transport: \(transport.rawValue); mode: \(mode.rawValue); action: \(isRunning ? "stop" : "start").")
         if isRunning {
@@ -109,7 +111,17 @@ final class BridgeViewModel: ObservableObject {
         }
     }
 
-    func stop() { bridge.stop() }
+    func stop() {
+        monitoringPaused = false
+        bridge.stop()
+    }
+
+    func pauseMonitoringForDeviceAccess() {
+        monitoringPaused = true
+        ControllerDiagnostics.shared.record("Input bridge", stage: "paused",
+            message: "Live monitoring intentionally stopped for exclusive device access. This does not indicate a physical disconnect.")
+        bridge.stop()
+    }
 
     var canSetLighting: Bool {
         if case .ready = lightingStatus {

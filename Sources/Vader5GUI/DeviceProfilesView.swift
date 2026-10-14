@@ -94,7 +94,10 @@ struct DeviceProfilesView: View {
     private func read() {
         guard !model.operationInProgress else { return }
         model.deviceBusy = true
-        model.stop()
+        model.pauseMonitoringForDeviceAccess()
+        snapshot = nil
+        edited = nil
+        message = "Reading the active profile. Live monitoring is paused while the app accesses controller settings."
         error = nil
         Task {
             defer { model.deviceBusy = false }
@@ -102,7 +105,11 @@ struct DeviceProfilesView: View {
                 let value = try await Task.detached(priority: .userInitiated) { try Vader5Profiles.readActive() }.value
                 try load(value)
                 message = "Read profile \(Int(value.slot) + 1). Changes below are staged until you apply or save."
-            } catch { self.error = String(describing: error); ControllerDiagnostics.shared.record("Profile UI", stage: "failed", message: String(describing: error)) }
+            } catch {
+                self.error = String(describing: error)
+                message = "Profile read failed. Monitoring remains paused. Copy the error below or export the Diagnostics log."
+                ControllerDiagnostics.shared.record("Profile UI", stage: "failed", message: String(describing: error))
+            }
         }
     }
 
@@ -121,7 +128,7 @@ struct DeviceProfilesView: View {
         }
         let requested = profile
         model.deviceBusy = true
-        model.stop()
+        model.pauseMonitoringForDeviceAccess()
         error = nil
         Task {
             defer { model.deviceBusy = false }
@@ -139,6 +146,8 @@ struct DeviceProfilesView: View {
                 message = persist ? "Saved to controller and readback verified." : "Applied in RAM and readback verified. Not saved across restart."
             } catch {
                 self.error = "\(error) The device may have partial changes; read its profile again."
+                message = "Profile changes could not be confirmed. Monitoring remains paused."
+                ControllerDiagnostics.shared.record("Profile UI", stage: "failed", message: String(describing: error))
                 self.snapshot = nil
                 self.edited = nil
             }

@@ -50,7 +50,7 @@ struct CalibrationView: View {
             return
         }
         model.deviceBusy = true
-        model.stop()
+        model.pauseMonitoringForDeviceAccess()
         error = nil
         message = write ? "Applying and checking the setting…" : "Reading controller…"
         Task {

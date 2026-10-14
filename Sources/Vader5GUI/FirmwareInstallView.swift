@@ -54,7 +54,7 @@ struct FirmwareInstallView: View {
 
     private func prepare() {
         guard !bridge.operationInProgress else { return }
-        bridge.stop()
+        bridge.pauseMonitoringForDeviceAccess()
         bridge.deviceBusy = true
         prepared = nil
         error = nil
@@ -71,7 +71,7 @@ struct FirmwareInstallView: View {
 
     private func install() {
         guard !bridge.operationInProgress, let prepared else { return }
-        bridge.stop()
+        bridge.pauseMonitoringForDeviceAccess()
         bridge.deviceBusy = true
         error = nil
         let mode = bridge.executionMode

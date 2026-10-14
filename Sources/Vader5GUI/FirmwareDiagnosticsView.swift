@@ -30,7 +30,7 @@ final class FirmwareDiagnosticsViewModel: ObservableObject {
     ]
     func checkFirmware(bridge: BridgeViewModel) {
         guard !isCheckingFirmware, !bridge.operationInProgress else { return }
-        bridge.stop()
+        bridge.pauseMonitoringForDeviceAccess()
         bridge.deviceBusy = true
         ControllerDiagnostics.shared.record("Firmware catalog", stage: "started", message: "Reading versions and requesting official releases.")
         isCheckingFirmware = true
