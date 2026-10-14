@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import SwiftUI
+import Combine
 import Vader5Core
 
 enum FlydigiDockLightingStatus: Equatable {
@@ -19,6 +20,8 @@ final class BridgeViewModel: ObservableObject {
     }
     @Published var status: Vader5BridgeStatus = .stopped
     @Published var state: Vader5State = .neutral
+    @Published var pressedProfileButtons: Set<Int> = []
+    let mappingButtonEvents = PassthroughSubject<Set<Int>, Never>()
     @Published var errorMessage: String? {
         didSet { if let errorMessage { ControllerDiagnostics.shared.record("App operation", mode: executionMode, stage: "failed", message: errorMessage) } }
     }
@@ -66,9 +69,17 @@ final class BridgeViewModel: ObservableObject {
         ControllerDiagnostics.shared.record("App session", mode: .dryRun, message: "Started with dry run enabled. Hardware reads remain live.")
         loadDockFactoryLighting(deviceType: 0)
         bridge.onStatus = { [weak self] status in
-            Task { @MainActor in
+            DispatchQueue.main.async {
                 self?.status = status
                 ControllerDiagnostics.shared.record("Input bridge", message: String(describing: status))
+            }
+        }
+        bridge.onMappingButtons = { [weak self] held in
+            // FIFO delivery preserves press/release order even between visual frames.
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.pressedProfileButtons = held
+                self.mappingButtonEvents.send(held)
             }
         }
         bridge.onState = { [weak self] state in

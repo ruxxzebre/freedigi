@@ -88,6 +88,33 @@ Other settings and unknown bytes are preserved. Stick/trigger curves, gyro,
 turbo and macro editing in the advanced panel remain drafts. Backups are JSON
 snapshots of raw wire bytes, not the vendor's protobuf `.dat` export format.
 
+### Press to map and profile read retries
+
+After reading a profile, start input monitoring if needed, then select **Start
+press to map**. Press one source button, release everything, press its target,
+and release again. Repeat for the next mapping. This only stages changes; Apply
+or Save remains explicit, including in dry-run mode. Pressed rows light up and
+the selected source is outlined. Stop capture or Escape exits the gesture.
+Settings access, disconnection, leaving Configuration, manual menu edits and
+Discard edits also stop capture.
+
+Capture uses enhanced USB receiver button reports, including separate M1–M4
+bits. Button transitions bypass the 60 Hz visual coalescer and arrive in order.
+D-pad diagonals and simultaneous button presses are rejected as ambiguous;
+Home/Fn/LM/RM cannot be mapped by this editor. Triggers engage at 160/255 and
+release below 80/255 to prevent noise. If a rear button reports only its assigned
+button or multiple buttons, explicitly choose M1–M4 in the fallback disclosure
+before pressing the target. Bluetooth capture is disabled because its reports
+may expose assigned outputs rather than physical buttons. Actual rear-button
+report behavior still requires verification on the user's firmware/dongle.
+
+Explicit profile reads make at most **five total attempts** for timeouts and
+HID open/I/O failures, reopening the session with a 200 ms delay between attempts.
+The UI stays in its reading state until success or terminal failure. Diagnostics
+records every attempt. Unsupported data, identity/profile conflicts and validation
+failures stop immediately. Apply, Save, firmware writes and their readback checks
+are not retried by this mechanism.
+
 ## Firmware
 
 The Firmware page prepares packages from the connected variant's official

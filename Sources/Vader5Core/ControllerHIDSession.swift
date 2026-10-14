@@ -134,7 +134,20 @@ extension ControllerHIDSession: FirmwareFeatureChannel {
 public enum Vader5Profiles {
     public static func readActive() throws -> ControllerProfileSnapshot {
         try ControllerDiagnostics.shared.perform("Read profile") {
-            try ControllerProfileClient(channel: ControllerHIDSession()).readActive()
+            try ControllerProfileReadRetry.read(retryTransportError: { error in
+                if let error = error as? Vader5Error {
+                    switch error {
+                    case .managerOpen, .deviceOpen: return true
+                    default: return false
+                    }
+                }
+                if case Vader5FirmwareReadError.requestFailed = error { return true }
+                return false
+            }) {
+                // Each failed attempt closes its session before the next starts,
+                // so partial packet queues are never reused.
+                try ControllerProfileClient(channel: ControllerHIDSession()).readActive()
+            }
         }
     }
 

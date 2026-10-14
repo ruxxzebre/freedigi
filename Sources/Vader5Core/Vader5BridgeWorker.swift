@@ -11,11 +11,13 @@ public final class Vader5BridgeWorker: @unchecked Sendable {
         // Accessed only on the worker thread after publication of runLoop.
         let bridge = Vader5Bridge()
         var pendingUIState: Vader5State?
+        var mappingInput = ControllerMappingInput()
         var uiTimer: CFRunLoopTimer?
     }
     private let state = State()
     private let callbacks = NSLock()
     private var stateCallback: (@Sendable (Vader5State) -> Void)?
+    private var mappingButtonsCallback: (@Sendable (Set<Int>) -> Void)?
     private var statusCallback: (@Sendable (Vader5BridgeStatus) -> Void)?
     private var lightingCallback: (@Sendable (Vader5LightingStatus) -> Void)?
     private var configurationCallback: (@Sendable (Vader5LightingConfiguration) -> Void)?
@@ -23,6 +25,11 @@ public final class Vader5BridgeWorker: @unchecked Sendable {
     public var onState: (@Sendable (Vader5State) -> Void)? {
         get { callbacks.withLock { stateCallback } }
         set { callbacks.withLock { stateCallback = newValue } }
+    }
+    /// Discrete changes bypass the 60 Hz visual coalescer, preserving short taps.
+    public var onMappingButtons: (@Sendable (Set<Int>) -> Void)? {
+        get { callbacks.withLock { mappingButtonsCallback } }
+        set { callbacks.withLock { mappingButtonsCallback = newValue } }
     }
     public var onStatus: (@Sendable (Vader5BridgeStatus) -> Void)? {
         get { callbacks.withLock { statusCallback } }
@@ -59,11 +66,21 @@ public final class Vader5BridgeWorker: @unchecked Sendable {
         while state.runLoop == nil { state.ready.wait() }
         state.ready.unlock()
         // Installed before any device is scheduled. Closures do not retain this owner.
-        state.bridge.onState = { [weak state] value in
+        state.bridge.onState = { [weak state, weak self] value in
             guard let state else { return }
             state.pendingUIState = value
+            if let held = state.mappingInput.update(buttonBits: value.buttons.rawValue, dpad: value.dpad,
+                                                    leftTrigger: value.leftTrigger, rightTrigger: value.rightTrigger) {
+                self?.onMappingButtons?(held)
+            }
         }
-        state.bridge.onStatus = { [weak self] in self?.onStatus?($0) }
+        state.bridge.onStatus = { [weak self, weak state] status in
+            self?.onStatus?(status)
+            if case .running = status { return }
+            state?.mappingInput = ControllerMappingInput()
+            state?.pendingUIState = .neutral
+            self?.onMappingButtons?([])
+        }
         state.bridge.onLightingStatus = { [weak self] in self?.onLightingStatus?($0) }
         state.bridge.onLightingConfiguration = { [weak self] in self?.onLightingConfiguration?($0) }
         enqueue { [weak self] in

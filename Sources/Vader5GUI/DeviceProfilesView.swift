@@ -10,6 +10,7 @@ struct DeviceProfilesView: View {
     @State private var title = ""
     @State private var vibration = true
     @State private var confirmRead = false
+    @State private var capture = ControllerMappingCapture()
     @State private var message = "Read the active PC profile from your connected controller."
     @State private var error: String?
     @State private var backupURL: URL?
@@ -34,6 +35,7 @@ struct DeviceProfilesView: View {
                 operationStatus
                 if let snapshot, let edited {
                     profileDetails(snapshot)
+                    inputCaptureCard
                     ConfigurationCard(title: "Back buttons", subtitle: "Choose what M1–M4 should do. Selections are staged until you apply or save.", icon: "gamecontroller.fill") {
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                             ForEach(18..<22, id: \.self) { source in
@@ -77,6 +79,24 @@ struct DeviceProfilesView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if snapshot != nil { actionBar }
         }
+        .onReceive(model.mappingButtonEvents) { held in
+            guard model.isRunning, !model.operationInProgress, snapshot != nil,
+                  model.transport == .usbReceiver else { cancelCapture(); return }
+            let previousIssue = capture.issue
+            let previousSource = capture.selectedSource
+            if let assignment = capture.receive(held) {
+                stageMapping(assignment.source, to: assignment.destination)
+            }
+            if let issue = capture.issue, issue != previousIssue {
+                ControllerDiagnostics.shared.record("Press to map", stage: "input rejected", message: issue)
+            }
+            if let source = capture.selectedSource, source != previousSource {
+                ControllerDiagnostics.shared.record("Press to map", stage: "source selected", message: "Waiting for target of \(buttonName(source)).")
+            }
+        }
+        .onChange(of: model.operationInProgress) { busy in if busy { cancelCapture() } }
+        .onChange(of: model.isRunning) { running in if !running { cancelCapture() } }
+        .onDisappear { cancelCapture() }
         .confirmationDialog("Discard staged changes and read the controller again?", isPresented: $confirmRead) {
             Button("Discard and read", role: .destructive) { read() }
             Button("Keep editing", role: .cancel) {}
@@ -144,7 +164,73 @@ struct DeviceProfilesView: View {
     }
 
     private func buttonName(_ id: Int) -> String {
-        buttons.first { $0.0 == id }?.1 ?? "Button \(id)"
+        buttons.first { $0.0 == id }?.1 ?? [32: "Home", 33: "Fn", 34: "LM", 35: "RM"][id] ?? "Button \(id)"
+    }
+
+    private var capturePrompt: String {
+        switch capture.phase {
+        case .idle: "Press a button to see it light up. Start capture to build mappings with the controller."
+        case .releaseForSource: "Release all buttons. Then press the next button you want to change."
+        case .source: "1 · Press the button you want to change."
+        case .releaseForTarget(let source): "Release all buttons. Next, press the target for \(buttonName(source))."
+        case .target(let source): "2 · Press the button you want \(buttonName(source)) to act as."
+        }
+    }
+
+    private var inputCaptureCard: some View {
+        ConfigurationCard(title: "Press to map", subtitle: "Press a source, release it, then press its target. Repeat for each button.", icon: "hand.tap") {
+            HStack(spacing: 12) {
+                Image(systemName: model.isRunning ? "dot.radiowaves.left.and.right" : "pause.circle")
+                    .foregroundStyle(model.isRunning ? Color.green : Color.secondary)
+                Text(model.isRunning
+                     ? (model.pressedProfileButtons.isEmpty ? "No buttons pressed" : "Pressed: " + model.pressedProfileButtons.sorted().map(buttonName).joined(separator: " + "))
+                     : "Input monitoring is stopped")
+                    .font(.callout.weight(.semibold))
+                Spacer()
+                if capture.isActive {
+                    Button("Stop capture") { cancelCapture() }.keyboardShortcut(.cancelAction)
+                } else if !model.isRunning {
+                    Button("Start input monitoring") { model.toggle() }
+                } else {
+                    Button("Start press to map") { startCapture() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.transport != .usbReceiver)
+                }
+            }
+            .controlSize(.large).disabled(model.operationInProgress)
+            Text(capturePrompt).font(.callout).foregroundStyle(capture.isActive ? Color.primary : Color.secondary)
+            if let issue = capture.issue {
+                Text(issue).font(.callout).foregroundStyle(.orange)
+            }
+            Text("Captured assignments are staged only. Apply or save below when you're done. For triggers, press past halfway; release fully between steps.")
+                .font(.caption).foregroundStyle(.secondary)
+            DisclosureGroup("Back button not detected separately?") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Use the USB receiver for capture. If one press reports several buttons, or only its existing assignment, choose the physical back button here and then press its target. ControlLab does not guess the source from its current mapping.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        ForEach(18..<22, id: \.self) { source in
+                            Button("Choose \(buttonName(source))") { startCapture(source: source) }
+                        }
+                    }
+                    .disabled(!model.isRunning || model.operationInProgress || model.transport != .usbReceiver)
+                }
+                .padding(.top, 8)
+            }
+            .font(.callout)
+        }
+    }
+
+    private func startCapture(source: Int? = nil) {
+        guard snapshot != nil, model.isRunning, !model.operationInProgress, model.transport == .usbReceiver else { return }
+        capture.start(held: model.pressedProfileButtons, source: source)
+        ControllerDiagnostics.shared.record("Press to map", stage: "started", message: source.map { "Source selected: \(buttonName($0))." } ?? "Waiting for a source button.")
+    }
+
+    private func cancelCapture() {
+        guard capture.isActive else { return }
+        capture.cancel()
+        ControllerDiagnostics.shared.record("Press to map", stage: "stopped", message: "Capture stopped. Staged edits remain local.")
     }
 
     private func mappingRow(_ source: Int, profile: ControllerProfile) -> some View {
@@ -170,7 +256,7 @@ struct DeviceProfilesView: View {
             Image(systemName: "arrow.right").font(.caption).foregroundStyle(.secondary)
             Menu {
                 ForEach(buttons, id: \.0) { button in
-                    Button { stageMapping(source, to: button.0) } label: {
+                    Button { cancelCapture(); stageMapping(source, to: button.0) } label: {
                         if target == button.0 { Label(button.1, systemImage: "checkmark") }
                         else { Text(button.1) }
                     }
@@ -186,8 +272,8 @@ struct DeviceProfilesView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-        .background(SpaceStationTheme.option, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(changed ? Color.orange.opacity(0.5) : Color.clear))
+        .background(model.isRunning && model.pressedProfileButtons.contains(source) ? SpaceStationTheme.accent.opacity(0.24) : SpaceStationTheme.option, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(capture.selectedSource == source ? SpaceStationTheme.accent : (changed ? Color.orange.opacity(0.5) : Color.clear), lineWidth: 2))
     }
 
     private var actionBar: some View {
@@ -202,6 +288,7 @@ struct DeviceProfilesView: View {
             Spacer(minLength: 8)
             if hasStagedChanges {
                 Button("Discard edits") {
+                    cancelCapture()
                     guard let snapshot else { return }
                     do { try load(snapshot); error = nil; message = "Edits discarded. Showing the last controller read." }
                     catch { self.error = String(describing: error) }
@@ -244,6 +331,7 @@ struct DeviceProfilesView: View {
 
     private func read() {
         guard !model.operationInProgress else { return }
+        cancelCapture()
         model.deviceBusy = true
         let resumeMonitoring = model.pauseMonitoringForDeviceAccess()
         snapshot = nil
@@ -269,6 +357,7 @@ struct DeviceProfilesView: View {
 
     private func apply(persist: Bool) {
         guard !model.operationInProgress, let snapshot, var profile = edited else { return }
+        cancelCapture()
         do { try profile.setTitle(title) }
         catch { self.error = String(describing: error); ControllerDiagnostics.shared.record("Profile UI", stage: "failed", message: String(describing: error)); return }
         profile.setVibrationEnabled(vibration)
@@ -333,6 +422,7 @@ struct DeviceProfilesView: View {
 
     private func restore() {
         guard !model.operationInProgress, let snapshot else { return }
+        cancelCapture()
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
