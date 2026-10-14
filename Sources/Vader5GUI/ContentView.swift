@@ -68,11 +68,10 @@ struct ContentView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 11) {
-                RoundedRectangle(cornerRadius: 9)
-                    .fill(CLTheme.accent.gradient)
-                    .frame(width: 34, height: 34)
-                    .overlay(Image(systemName: "waveform.path.ecg")
-                        .font(.system(size: 16, weight: .bold)).foregroundStyle(.white))
+                Image(nsImage: NSImage(named: "ControlLab") ?? NSImage(named: NSImage.applicationIconName) ?? NSImage())
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 38, height: 38)
                 VStack(alignment: .leading, spacing: 0) {
                     Text("ControlLab").font(.headline.weight(.bold))
                     Text("DEVICE STUDIO").font(.system(size: 8, weight: .bold))
@@ -93,7 +92,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Vader 5 Pro").font(.callout.weight(.semibold))
                         HStack(spacing: 5) {
-                            Circle().fill(model.isRunning ? .green : .secondary)
+                            Circle().fill(model.deviceBusy || model.monitoringPaused ? .orange : (model.isRunning ? .green : .secondary))
                                 .frame(width: 6, height: 6)
                             Text(model.statusTitle).font(.caption2).foregroundStyle(.secondary)
                         }
@@ -116,24 +115,34 @@ struct ContentView: View {
             .padding(.horizontal, 10)
 
             Spacer()
-            Toggle("Dry run", isOn: $model.dryRun)
-                .toggleStyle(.switch)
-                .fixedSize()
-                .disabled(model.operationInProgress)
-                .help("Preview settings and firmware writes. Device reads and live input monitoring still communicate with hardware.")
 
             VStack(alignment: .leading, spacing: 11) {
+                HStack {
+                    Text("Dry run").font(.callout.weight(.semibold))
+                    Spacer()
+                    Toggle("Dry run", isOn: $model.dryRun)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .fixedSize()
+                        .disabled(model.operationInProgress)
+                        .help("Preview writes. Reads and live input still communicate with the device.")
+                }
+                Text(model.dryRun ? "Preview changes without writing." : "Changes will be sent to the device.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Divider()
                 Picker("Connection", selection: $model.transport) {
                     ForEach(Vader5Transport.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 .labelsHidden().pickerStyle(.menu).frame(maxWidth: .infinity, alignment: .leading)
-                .disabled(model.isRunning)
+                .disabled(model.isRunning || model.operationInProgress)
 
                 Picker("Mode", selection: $model.mode) {
                     ForEach(Vader5BridgeMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 .labelsHidden().pickerStyle(.menu).frame(maxWidth: .infinity, alignment: .leading)
-                .disabled(model.isRunning || model.transport == .bluetooth)
+                .disabled(model.isRunning || model.operationInProgress || model.transport == .bluetooth)
 
                 Button { model.toggle() } label: {
                     Label(model.isRunning ? "Disconnect" : (model.monitoringPaused ? "Resume monitoring" : "Connect device"),
@@ -141,6 +150,7 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent).controlSize(.large)
+                .disabled(model.operationInProgress)
                 .keyboardShortcut(.defaultAction)
             }
             .padding(14)
@@ -148,7 +158,7 @@ struct ContentView: View {
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(CLTheme.border))
             .padding(12)
         }
-        .frame(width: 204)
+        .frame(width: 230)
         .background(CLTheme.sidebar)
         .overlay(alignment: .trailing) { Rectangle().fill(CLTheme.border).frame(width: 1) }
     }
@@ -166,9 +176,9 @@ struct ContentView: View {
                 StatusPill(text: "Bluetooth", icon: "antenna.radiowaves.left.and.right")
             }
             StatusPill(
-                text: model.isRunning ? "ONLINE" : (model.monitoringPaused ? "PAUSED" : "OFFLINE"),
-                icon: model.isRunning ? "checkmark.circle.fill" : "circle.dashed",
-                tint: model.isRunning ? .green : .secondary)
+                text: model.deviceBusy ? "SETTINGS ACCESS" : (model.isRunning ? "ONLINE" : (model.monitoringPaused ? "INPUT PAUSED" : "OFFLINE")),
+                icon: model.deviceBusy ? "gearshape" : (model.isRunning ? "checkmark.circle.fill" : (model.monitoringPaused ? "pause.circle" : "circle.dashed")),
+                tint: model.deviceBusy || model.monitoringPaused ? .orange : (model.isRunning ? .green : .secondary))
         }
         .padding(.horizontal, 24).frame(height: 60)
         .background(CLTheme.sidebar.opacity(0.72))

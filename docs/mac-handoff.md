@@ -17,6 +17,30 @@ xcode-select --install  # only if the tools are absent
 open build/ControlLab.app
 ```
 
+To install the built app and its updater into `~/Applications`, quit ControlLab
+after any device operation completes and run `./scripts/install-mac.sh`. This
+adds the ControlLab icon in Finder, the Dock and the sidebar. Installation stages
+and verifies the app before replacing the previous installed copy.
+
+For subsequent updates, run:
+
+```sh
+bash ~/Applications/update.sh
+```
+
+The updater downloads the latest installer over SSH from `nesko@chaiky.dev`
+(an optional first argument overrides the SSH destination), verifies the source
+bundle checksum, creates a fresh checkout under `~/Developer`, runs the Mac
+build/tests, installs and opens the app. SSH access to that server is required.
+Existing source checkouts and app settings are preserved. Updates are manual;
+the script never force-quits the app or performs controller firmware updates.
+Logs are in `~/Library/Logs/ControlLab/update.log` and the new checkout's
+`build/install.log`. Packaging also places a copy of `update.sh` in `build/`.
+
+The icon's editable source is `Resources/ControlLab.svg`; the checked-in PNG and
+multi-resolution ICNS are bundled before code signing, so Mac builds do not need
+an image conversion tool.
+
 The script runs all tests, builds the release CLI, packages both GUI executables
 and SDL, and verifies the app's ad-hoc signature. It needs no Windows installer,
 decompilation tools, Go, Node, or research directory. Default signing does not
@@ -168,7 +192,11 @@ this recovery to guess flash persistence. Errors and Diagnostics now name the
 phase and command (identity 0x01, slot 0xA1, read 0xA3, start 0xA4, data 0xA5,
 save 0xA6), whether profile writes were attempted, and incomplete read counts.
 
-The sidebar distinguishes an intentional monitoring pause from Disconnected and
-offers Resume monitoring. A failed fresh profile read clears the previous
+The sidebar shows Settings access during profile/calibration operations, with
+an amber indicator. Previously active monitoring resumes after profile/calibration
+reads (including failed reads) and verified writes. Unverified writes leave
+monitoring paused for recovery; use Read again or Resume monitoring. A user who
+was not monitoring stays stopped. Firmware operations retain their explicit
+resume behavior. A failed fresh profile read clears the previous
 editable snapshot. These changes still require a Mac build and hardware check;
 portable tests cover lost ACKs/readbacks and reject unsafe recovery outcomes.

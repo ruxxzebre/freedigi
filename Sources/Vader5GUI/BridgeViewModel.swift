@@ -89,8 +89,9 @@ final class BridgeViewModel: ObservableObject {
     }
 
     var statusTitle: String {
-        switch status {
-        case .stopped: monitoringPaused ? "Monitoring paused" : "Disconnected"
+        if deviceBusy { return "Accessing settings…" }
+        return switch status {
+        case .stopped: monitoringPaused ? "Input monitoring paused" : "Disconnected"
         case .connecting: "Connecting…"
         case .running(.monitor): transport == .bluetooth ? "Bluetooth connected" : "Monitoring"
         case .running(.virtualGamepad): "Gamepad active"
@@ -116,11 +117,26 @@ final class BridgeViewModel: ObservableObject {
         bridge.stop()
     }
 
-    func pauseMonitoringForDeviceAccess() {
-        monitoringPaused = true
+    @discardableResult
+    func pauseMonitoringForDeviceAccess() -> Bool {
+        let shouldResume = isRunning || status == .connecting || monitoringPaused
+        monitoringPaused = shouldResume
         ControllerDiagnostics.shared.record("Input bridge", stage: "paused",
             message: "Live monitoring intentionally stopped for exclusive device access. This does not indicate a physical disconnect.")
         bridge.stop()
+        return shouldResume
+    }
+
+    func resumeMonitoringAfterDeviceAccess(ifNeeded shouldResume: Bool) {
+        guard shouldResume, monitoringPaused, !operationInProgress else { return }
+        monitoringPaused = false
+        status = .connecting
+        ControllerDiagnostics.shared.record("Input bridge", stage: "resuming",
+            message: "Settings access finished; restoring live input monitoring.")
+        do { try bridge.start(mode: mode, transport: transport) }
+        catch {
+            errorMessage = "Settings access finished, but input monitoring could not resume: \(error)"
+        }
     }
 
     var canSetLighting: Bool {

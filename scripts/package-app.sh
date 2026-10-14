@@ -33,6 +33,10 @@ mkdir -p "${app_dir}/Contents/MacOS" "${app_dir}/Contents/Resources/ThirdPartyNo
 cp "${binary}" "${app_dir}/Contents/MacOS/ControlLab"
 cp "${preview_binary}" "${app_dir}/Contents/MacOS/ControlLabRGBPreview"
 cp "${repo_dir}/Resources/Info.plist" "${app_dir}/Contents/Info.plist"
+cp "${repo_dir}/Resources/ControlLab.icns" "${app_dir}/Contents/Resources/ControlLab.icns"
+cp "${repo_dir}/Resources/ControlLab.png" "${app_dir}/Contents/Resources/ControlLab.png"
+cp "${repo_dir}/scripts/update.sh" "${repo_dir}/build/update.sh"
+chmod +x "${repo_dir}/build/update.sh"
 source_revision="$(git -C "${repo_dir}" rev-parse --short HEAD 2>/dev/null || print development)"
 if [[ -n "$(git -C "${repo_dir}" status --porcelain 2>/dev/null)" ]]; then
     source_revision="${source_revision}-modified"

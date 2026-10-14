@@ -50,11 +50,15 @@ struct CalibrationView: View {
             return
         }
         model.deviceBusy = true
-        model.pauseMonitoringForDeviceAccess()
+        let resumeMonitoring = model.pauseMonitoringForDeviceAccess()
         error = nil
         message = write ? "Applying and checking the setting…" : "Reading controller…"
         Task {
-            defer { model.deviceBusy = false }
+            var verified = false
+            defer {
+                model.deviceBusy = false
+                model.resumeMonitoringAfterDeviceAccess(ifNeeded: resumeMonitoring && (!write || verified))
+            }
             do {
                 let result = try await Task.detached(priority: .userInitiated) {
                     if write, let previous {
@@ -64,6 +68,7 @@ struct CalibrationView: View {
                 }.value
                 setting = result
                 enabled = result.enabled
+                verified = true
                 message = write ? "Setting applied and readback verified. Reconnect and read again to check persistence." : "Read from controller. Changes are sent only when you click Apply."
             } catch {
                 setting = nil

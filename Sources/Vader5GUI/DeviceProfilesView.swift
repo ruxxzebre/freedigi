@@ -61,7 +61,7 @@ struct DeviceProfilesView: View {
                         Button(model.dryRun ? "Preview save" : "Save to controller") { apply(persist: true) }
                             .buttonStyle(.borderedProminent)
                     }
-                    Text("Each write creates a backup and verifies the result by reading it back. Live monitoring stops while profiles are accessed. Select another PC profile on the controller, then read it here.")
+                    Text("Each write creates a backup and verifies the result by reading it back. Active input monitoring resumes after a read or a verified write. Select another PC profile on the controller, then read it here.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if model.deviceBusy { ProgressView("Accessing controller…") }
@@ -94,20 +94,23 @@ struct DeviceProfilesView: View {
     private func read() {
         guard !model.operationInProgress else { return }
         model.deviceBusy = true
-        model.pauseMonitoringForDeviceAccess()
+        let resumeMonitoring = model.pauseMonitoringForDeviceAccess()
         snapshot = nil
         edited = nil
         message = "Reading the active profile. Live monitoring is paused while the app accesses controller settings."
         error = nil
         Task {
-            defer { model.deviceBusy = false }
+            defer {
+                model.deviceBusy = false
+                model.resumeMonitoringAfterDeviceAccess(ifNeeded: resumeMonitoring)
+            }
             do {
                 let value = try await Task.detached(priority: .userInitiated) { try Vader5Profiles.readActive() }.value
                 try load(value)
                 message = "Read profile \(Int(value.slot) + 1). Changes below are staged until you apply or save."
             } catch {
                 self.error = String(describing: error)
-                message = "Profile read failed. Monitoring remains paused. Copy the error below or export the Diagnostics log."
+                message = "Profile read failed. Copy the error below or export the Diagnostics log."
                 ControllerDiagnostics.shared.record("Profile UI", stage: "failed", message: String(describing: error))
             }
         }
@@ -128,10 +131,14 @@ struct DeviceProfilesView: View {
         }
         let requested = profile
         model.deviceBusy = true
-        model.pauseMonitoringForDeviceAccess()
+        let resumeMonitoring = model.pauseMonitoringForDeviceAccess()
         error = nil
         Task {
-            defer { model.deviceBusy = false }
+            var verified = false
+            defer {
+                model.deviceBusy = false
+                model.resumeMonitoringAfterDeviceAccess(ifNeeded: resumeMonitoring && verified)
+            }
             do {
                 let directory = try FileManager.default.url(for: .applicationSupportDirectory,
                     in: .userDomainMask, appropriateFor: nil, create: true)
@@ -143,6 +150,7 @@ struct DeviceProfilesView: View {
                     try Vader5Profiles.apply(requested, replacing: snapshot, persist: persist, backupURL: backup)
                 }.value
                 try load(value)
+                verified = true
                 message = persist ? "Saved to controller and readback verified." : "Applied in RAM and readback verified. Not saved across restart."
             } catch {
                 if let failure = error as? ControllerProfileFailure {
