@@ -22,6 +22,7 @@ public enum ControllerProfileReadRetry {
             } catch {
                 let retry: Bool
                 if case ControllerProtocolError.timeout = error { retry = true }
+                else if let failure = error as? ControllerProfileFailure { retry = !failure.writesAttempted }
                 else { retry = retryTransportError(error) }
                 let again = retry && number < maximumAttempts
                 ControllerDiagnostics.shared.record("Profile read attempt", stage: again ? "retrying" : "failed",

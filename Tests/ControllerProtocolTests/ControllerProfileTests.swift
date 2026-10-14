@@ -150,6 +150,149 @@ final class ControllerProfileTests: XCTestCase {
         }
     }
 
+    func testRetryCompletesPartialApplyAndSaveWithoutRewritingFinishedSegments() throws {
+        for persist in [false, true] {
+            let channel = try SimulatedController(bytes: fixture())
+            let before = try ControllerProfileClient(channel: channel).readActive()
+            var edited = try before.profile()
+            try edited.map(18, to: 4)
+            try edited.setTitle("Two edits")
+            channel.loseWriteACK = true
+            var sessions = 0
+            let after = try ControllerProfileWriteRetry.apply(edited, replacing: before, persist: persist, waitBeforeRetry: {}) {
+                sessions += 1
+                channel.queue.removeAll() // Fresh connection; hardware state persists.
+                return channel
+            }
+            var expected = edited
+            if persist { expected.setDataVersion(edited.dataVersion &+ 1) }
+            XCTAssertEqual(try after.profile(), expected)
+            XCTAssertGreaterThan(sessions, 1)
+            // One mapping segment and two name segments, each written once.
+            XCTAssertEqual(channel.mutations.filter { $0 == 0xa5 }.count, 3)
+            XCTAssertEqual(Set(channel.segmentStarts).count, 3)
+            XCTAssertEqual(channel.mutations.filter { $0 == 0xa6 }.count, persist ? 1 : 0)
+        }
+    }
+
+    func testRetrySaveAfterLostAcknowledgmentRequiresNewAcknowledgedSave() throws {
+        let channel = try SimulatedController(bytes: fixture())
+        let before = try ControllerProfileClient(channel: channel).readActive()
+        var edited = try before.profile()
+        try edited.map(19, to: 5)
+        channel.saveACKsToDrop = 1
+        let after = try ControllerProfileWriteRetry.apply(edited, replacing: before, persist: true, waitBeforeRetry: {}) {
+            channel.queue.removeAll(); return channel
+        }
+        XCTAssertEqual(channel.mutations.filter { $0 == 0xa5 }.count, 1)
+        XCTAssertEqual(channel.mutations.filter { $0 == 0xa6 }.count, 2)
+        XCTAssertEqual(try after.profile().dataVersion, edited.dataVersion &+ 2)
+        XCTAssertEqual(try after.profile().mapping(for: 19), 5)
+    }
+
+    func testAcknowledgedSaveWithLostReadbackDoesNotSaveTwice() throws {
+        let channel = try SimulatedController(bytes: fixture())
+        let before = try ControllerProfileClient(channel: channel).readActive()
+        var edited = try before.profile()
+        try edited.map(19, to: 5)
+        channel.readbacksAfterSaveToDrop = 1
+        let after = try ControllerProfileWriteRetry.apply(edited, replacing: before, persist: true, waitBeforeRetry: {}) {
+            channel.queue.removeAll(); return channel
+        }
+        XCTAssertEqual(channel.mutations.filter { $0 == 0xa6 }.count, 1)
+        XCTAssertEqual(try after.profile().dataVersion, edited.dataVersion &+ 1)
+    }
+
+    func testWriteRetriesStopAfterFiveAttempts() throws {
+        for persist in [false, true] {
+            let channel = try SimulatedController(bytes: fixture())
+            let before = try ControllerProfileClient(channel: channel).readActive()
+            var edited = try before.profile()
+            try edited.map(18, to: 4)
+            channel.discardWrites = true
+            var sessions = 0
+            XCTAssertThrowsError(try ControllerProfileWriteRetry.apply(edited, replacing: before, persist: persist, waitBeforeRetry: {}) {
+                sessions += 1
+                channel.queue.removeAll(); return channel
+            })
+            XCTAssertEqual(sessions, 5)
+            XCTAssertEqual(channel.mutations.filter { $0 == 0xa5 }.count, 5)
+            XCTAssertFalse(channel.mutations.contains(0xa6))
+        }
+    }
+
+    func testSaveRetriesStopAfterFiveLostAcknowledgments() throws {
+        let channel = try SimulatedController(bytes: fixture())
+        let before = try ControllerProfileClient(channel: channel).readActive()
+        let edited = try before.profile()
+        channel.saveACKsToDrop = 10
+        XCTAssertThrowsError(try ControllerProfileWriteRetry.apply(edited, replacing: before, persist: true, waitBeforeRetry: {}) {
+            channel.queue.removeAll(); return channel
+        })
+        XCTAssertEqual(channel.mutations.filter { $0 == 0xa6 }.count, 5)
+    }
+
+    func testRetriesAbortOnIdentitySlotUnrelatedBytesOrVersionChanges() throws {
+        for scenario in 0..<4 {
+            let channel = try SimulatedController(bytes: fixture())
+            let before = try ControllerProfileClient(channel: channel).readActive()
+            var edited = try before.profile()
+            try edited.map(18, to: 4)
+            channel.loseWriteACK = true
+            var sessions = 0
+            XCTAssertThrowsError(try ControllerProfileWriteRetry.apply(edited, replacing: before, persist: true, waitBeforeRetry: {}) {
+                sessions += 1
+                channel.queue.removeAll()
+                if sessions == 2 {
+                    switch scenario {
+                    case 0: channel.deviceID = 144
+                    case 1: channel.slot = 1
+                    case 2: channel.bytes[400] ^= 1
+                    default: channel.bytes[225] &+= 7
+                    }
+                }
+                return channel
+            }) { error in
+                guard case ControllerProtocolError.conflict = error else { return XCTFail("Unexpected: \(error)") }
+            }
+            XCTAssertEqual(sessions, 2)
+            XCTAssertEqual(channel.mutations, [0xa4, 0xa5])
+        }
+    }
+
+    func testReadRetryHandlesActualClientTimeoutWrapper() throws {
+        let channel = try SimulatedController(bytes: fixture())
+        var attempts = 0
+        let result = try ControllerProfileReadRetry.read(waitBeforeRetry: {}) {
+            attempts += 1
+            channel.suppressIdentity = attempts < 5
+            channel.queue.removeAll()
+            return try ControllerProfileClient(channel: channel).readActive()
+        }
+        XCTAssertEqual(attempts, 5)
+        XCTAssertEqual(Array(result.data), channel.bytes)
+        XCTAssertTrue(channel.mutations.isEmpty)
+    }
+
+    func testFinalReadFailureRetainsEarlierWriteExposure() throws {
+        let channel = try SimulatedController(bytes: fixture())
+        let before = try ControllerProfileClient(channel: channel).readActive()
+        var edited = try before.profile()
+        try edited.map(18, to: 4)
+        channel.loseWriteACK = true
+        var sessions = 0
+        XCTAssertThrowsError(try ControllerProfileWriteRetry.apply(edited, replacing: before, persist: true, waitBeforeRetry: {}) {
+            sessions += 1
+            channel.queue.removeAll()
+            channel.suppressIdentity = sessions > 1
+            return channel
+        }) { error in
+            XCTAssertEqual((error as? ControllerProfileFailure)?.writesAttempted, true)
+        }
+        XCTAssertEqual(sessions, 5)
+        XCTAssertEqual(channel.mutations, [0xa4, 0xa5])
+    }
+
     func testCommandMatchesRecoveredWireBytes() {
         XCTAssertEqual(Array(ControllerCommand.frame(0xa3, payload: [2, 20]).prefix(7)),
                        [0x5a, 0xa5, 0xa3, 4, 2, 20, 0xbd])
@@ -166,6 +309,7 @@ private final class SimulatedController: ControllerChannel {
     var loseWriteACK = false, discardWrites = false
     var suppressIdentity = false, loseStartACK = false, suppressReadback = false
     var readbacksToDrop = 0
+    var saveACKsToDrop = 0, readbacksAfterSaveToDrop = 0
     var deviceID: UInt8 = 130
     var slot: UInt8 = 2
     var deviceAfterWrite: UInt8?, slotAfterWrite: UInt8?
@@ -185,6 +329,7 @@ private final class SimulatedController: ControllerChannel {
             result.replaceSubrange(0..<6, with: [0x5a, 0xa5, 0xa1, 12, 0, slot])
             queue.append(result)
         case 0xa3:
+            if readbacksAfterSaveToDrop > 0 && mutations.contains(0xa6) { readbacksAfterSaveToDrop -= 1; return }
             if suppressReadback && !mutations.isEmpty { return }
             if readbacksToDrop > 0 && !mutations.isEmpty { readbacksToDrop -= 1; return }
             var packets: [[UInt8]] = []
@@ -217,6 +362,7 @@ private final class SimulatedController: ControllerChannel {
         case 0xa6:
             mutations.append(command)
             bytes[225] = report[4]; bytes[226] = report[5]
+            if saveACKsToDrop > 0 { saveACKsToDrop -= 1; return }
             queue.append(ControllerCommand.frame(command))
         default: XCTFail("Unexpected command \(command)")
         }

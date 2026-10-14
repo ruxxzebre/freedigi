@@ -11,7 +11,7 @@ public enum ControllerProtocolError: Error, CustomStringConvertible, Sendable {
         case .invalid(let message): message
         case .timeout: "Controller response timed out. Read the device again before retrying."
         case .conflict: "The controller or active profile changed. Read it again before applying settings."
-        case .verification: "The controller did not read back the requested settings. They have not been saved by ControlLab."
+        case .verification: "The controller did not read back the requested settings. The result is unverified; read the active profile before another write."
         }
     }
 }
@@ -178,11 +178,14 @@ public struct ControllerProfileFailure: Error, CustomStringConvertible, Sendable
 }
 
 /// The A3 protocol has no request token. A session must have exclusive ownership
-/// and may not automatically retry timed-out writes (late ACKs are ambiguous).
+/// and must not replay timed-out writes in place (late ACKs are ambiguous).
+/// ControllerProfileWriteRetry reconciles a fresh session before another attempt.
 public final class ControllerProfileClient {
     private let channel: any ControllerChannel
     private var phase = "reading active profile"
-    private var writesAttempted = false
+    public private(set) var writesAttempted = false
+    public private(set) var saveAttempted = false
+    public private(set) var saveAcknowledged = false
     public init(channel: any ControllerChannel) { self.channel = channel }
 
     private func response(_ command: UInt8, timeout: TimeInterval = 2) throws -> [UInt8] {
@@ -274,6 +277,8 @@ public final class ControllerProfileClient {
     public func apply(_ edited: ControllerProfile, replacing snapshot: ControllerProfileSnapshot,
                       persist: Bool) throws -> ControllerProfileSnapshot {
         writesAttempted = false
+        saveAttempted = false
+        saveAcknowledged = false
         phase = "checking the current profile before writing"
         do {
             return try applyAndVerify(edited, replacing: snapshot, persist: persist)
@@ -325,8 +330,10 @@ public final class ControllerProfileClient {
             let version = original.dataVersion &+ 1
             traceRequest(0xa6)
             writesAttempted = true
+            saveAttempted = true
             try channel.send(reports.last!)
             _ = try response(0xa6, timeout: 12)
+            saveAcknowledged = true
             expected.setDataVersion(version)
         }
         phase = "final profile readback"

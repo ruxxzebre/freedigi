@@ -370,6 +370,7 @@ struct DeviceProfilesView: View {
             return
         }
         let requested = profile
+        message = persist ? "Saving the profile and verifying the controller response…" : "Applying temporary changes and verifying the controller response…"
         model.deviceBusy = true
         let resumeMonitoring = model.pauseMonitoringForDeviceAccess()
         error = nil

@@ -132,18 +132,20 @@ extension ControllerHIDSession: FirmwareFeatureChannel {
 }
 
 public enum Vader5Profiles {
+    private static func retryTransportError(_ error: Error) -> Bool {
+        if let error = error as? Vader5Error {
+            switch error {
+            case .managerOpen, .deviceOpen: return true
+            default: return false
+            }
+        }
+        if case Vader5FirmwareReadError.requestFailed = error { return true }
+        return false
+    }
+
     public static func readActive() throws -> ControllerProfileSnapshot {
         try ControllerDiagnostics.shared.perform("Read profile") {
-            try ControllerProfileReadRetry.read(retryTransportError: { error in
-                if let error = error as? Vader5Error {
-                    switch error {
-                    case .managerOpen, .deviceOpen: return true
-                    default: return false
-                    }
-                }
-                if case Vader5FirmwareReadError.requestFailed = error { return true }
-                return false
-            }) {
+            try ControllerProfileReadRetry.read(retryTransportError: retryTransportError) {
                 // Each failed attempt closes its session before the next starts,
                 // so partial packet queues are never reused.
                 try ControllerProfileClient(channel: ControllerHIDSession()).readActive()
@@ -173,7 +175,10 @@ public enum Vader5Profiles {
         }
         try encoder.encode(snapshot).write(to: backupURL, options: .atomic)
         return try ControllerDiagnostics.shared.perform("Write profile", details: "Profile \(snapshot.slot + 1); persist: \(persist); backup: \(backupURL.lastPathComponent).") {
-            try ControllerProfileClient(channel: ControllerHIDSession()).apply(profile, replacing: snapshot, persist: persist)
+            try ControllerProfileWriteRetry.apply(profile, replacing: snapshot, persist: persist,
+                                                  retryTransportError: retryTransportError) {
+                try ControllerHIDSession()
+            }
         }
     }
 }

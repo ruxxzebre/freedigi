@@ -112,8 +112,21 @@ Explicit profile reads make at most **five total attempts** for timeouts and
 HID open/I/O failures, reopening the session with a 200 ms delay between attempts.
 The UI stays in its reading state until success or terminal failure. Diagnostics
 records every attempt. Unsupported data, identity/profile conflicts and validation
-failures stop immediately. Apply, Save, firmware writes and their readback checks
-are not retried by this mechanism.
+failures stop immediately. This read helper never replays a write.
+
+Temporary Apply and Save use a separate recovery path, also limited to **five
+total attempts**. Each attempt opens a fresh session and reads the profile before
+writing. The identity, slot, format and version must agree with this operation;
+each byte must still be an original or requested value. Unexpected changes abort.
+Only differences still missing from the controller are resent. An exact temporary
+readback completes the operation without duplicate writes. If a Save ACK was
+received but final readback failed, matching readback completes it without another
+save. If the Save ACK was lost, RAM readback alone does not prove persistence:
+recovery issues a new save/version and requires an ACK and exact readback. This
+can repeat a flash save, at most five times; firmware flashing is not retried.
+One original backup covers the operation. Intermediate failures stay in Diagnostics
+while the UI remains busy. Device validation is still required; simulator tests
+cover partial writes, dropped ACKs, stale data, retry limits and version tracking.
 
 ## Firmware
 
