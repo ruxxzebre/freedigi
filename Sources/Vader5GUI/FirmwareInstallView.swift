@@ -29,19 +29,21 @@ struct FirmwareInstallView: View {
                     Text(prepared.release.info)
                     Text("\(prepared.byteCount) bytes · SHA-256 \(prepared.sha256)")
                         .font(.caption.monospaced()).textSelection(.enabled)
-                    Button("Install prepared update…") { confirmation = true }
+                    Button(bridge.dryRun ? "Preview update plan" : "Install prepared update…") {
+                        if bridge.dryRun { install() } else { confirmation = true }
+                    }
                         .buttonStyle(.borderedProminent)
                 }
                 if bridge.deviceBusy { ProgressView(value: progress) }
                 if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
-                Text("These native update paths have not yet been tested on a Mac with a controller. Jieli .ufw and unrecognized bootloader transitions remain unsupported. Installation is only reported as successful after the device returns with the expected firmware version.")
+                Text("Firmware flashing has not yet been hardware-validated. Jieli .ufw and unrecognized bootloader transitions remain unsupported. Installation is only reported as successful after the device returns with the expected firmware version.")
                     .font(.caption).foregroundStyle(.secondary)
                 DisclosureGroup("Package inspection and protocol simulator") {
-                    FirmwareDiagnosticsView()
+                    FirmwareDiagnosticsView(bridge: bridge)
                 }
             }
             .padding(24)
-            .disabled(bridge.deviceBusy)
+            .disabled(bridge.operationInProgress)
         }
         .confirmationDialog("Install \(prepared?.release.version ?? "") firmware?", isPresented: $confirmation) {
             Button("Install firmware", role: .destructive) { install() }
@@ -51,7 +53,7 @@ struct FirmwareInstallView: View {
     }
 
     private func prepare() {
-        guard !bridge.deviceBusy else { return }
+        guard !bridge.operationInProgress else { return }
         bridge.stop()
         bridge.deviceBusy = true
         prepared = nil
@@ -63,25 +65,26 @@ struct FirmwareInstallView: View {
             do {
                 prepared = try await Vader5FirmwareInstaller.prepare(module: module)
                 message = "Official update downloaded for this device. Review it before installing."
-            } catch { self.error = String(describing: error) }
+            } catch { self.error = String(describing: error); ControllerDiagnostics.shared.record("Firmware UI", stage: "failed", message: String(describing: error)) }
         }
     }
 
     private func install() {
-        guard !bridge.deviceBusy, let prepared else { return }
+        guard !bridge.operationInProgress, let prepared else { return }
         bridge.stop()
         bridge.deviceBusy = true
         error = nil
-        self.prepared = nil
+        let mode = bridge.executionMode
+        if mode == .live { self.prepared = nil }
         Task {
             defer { bridge.deviceBusy = false }
             do {
                 try await Task.detached(priority: .userInitiated) {
-                    try Vader5FirmwareInstaller.install(prepared) { stage, fraction in
+                    try Vader5FirmwareInstaller.install(prepared, mode: mode) { stage, fraction in
                         Task { @MainActor in message = stage; progress = fraction }
                     }
                 }.value
-                message = "Installed \(prepared.release.version); device identity and version verified."
+                message = mode == .dryRun ? "Update plan previewed. No firmware written; see Diagnostics." : "Installed \(prepared.release.version); device identity and version verified."
             } catch {
                 self.error = "\(error) Installation is not confirmed. Keep the device connected and retain this message."
             }

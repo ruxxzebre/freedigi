@@ -5,7 +5,7 @@ import AppKit
 final class ControlLabAppDelegate: NSObject, NSApplicationDelegate {
     weak var model: BridgeViewModel?
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if model?.deviceBusy == true {
+        if model?.operationInProgress == true {
             NSSound.beep()
             return .terminateCancel
         }

@@ -6,7 +6,9 @@ import Vader5Core
 final class FirmwareDiagnosticsViewModel: ObservableObject {
     @Published var packageInfo: Vader5FirmwarePackageInfo?
     @Published var events: [Vader5DiagnosticEvent] = []
-    @Published var errorMessage: String?
+    @Published var errorMessage: String? {
+        didSet { if let errorMessage { ControllerDiagnostics.shared.record("Firmware diagnostics", stage: "failed", message: errorMessage) } }
+    }
     @Published var availableFirmware: Vader5FirmwareCatalog?
     @Published var isCheckingFirmware = false
     @Published var hasCheckedFirmware = false
@@ -15,7 +17,9 @@ final class FirmwareDiagnosticsViewModel: ObservableObject {
     @Published var installedFirmware: Vader5FirmwareVersions?
     @Published var downloadingModule: String?
     @Published var firmwareDownloadMessage: String?
-    @Published var firmwareDownloadError: String?
+    @Published var firmwareDownloadError: String? {
+        didSet { if let firmwareDownloadError { ControllerDiagnostics.shared.record("Firmware download", stage: "failed", message: firmwareDownloadError) } }
+    }
     @Published var scenario = "Success"
     private var selectedPackage: Data?
 
@@ -24,8 +28,11 @@ final class FirmwareDiagnosticsViewModel: ObservableObject {
         "Disconnect and recover", "Corrupted packet and retry", "Interrupt and restart",
         "Unexpected acknowledgement",
     ]
-    func checkFirmware() {
-        guard !isCheckingFirmware else { return }
+    func checkFirmware(bridge: BridgeViewModel) {
+        guard !isCheckingFirmware, !bridge.operationInProgress else { return }
+        bridge.stop()
+        bridge.deviceBusy = true
+        ControllerDiagnostics.shared.record("Firmware catalog", stage: "started", message: "Reading versions and requesting official releases.")
         isCheckingFirmware = true
         errorMessage = nil
         availableFirmware = nil
@@ -33,6 +40,7 @@ final class FirmwareDiagnosticsViewModel: ObservableObject {
         hasReadDevice = false
         installedFirmware = nil
         Task {
+            defer { bridge.deviceBusy = false }
             do {
                 let versions = try await Task.detached(priority: .userInitiated) {
                     try Vader5FirmwareReader.read()
@@ -46,6 +54,7 @@ final class FirmwareDiagnosticsViewModel: ObservableObject {
                     appVersion: "4.2.0.9"
                 )
                 hasCheckedFirmware = true
+                ControllerDiagnostics.shared.record("Firmware catalog", stage: "completed", message: "Installed versions: \(versions). Catalog returned.")
             } catch {
                 errorMessage = String(describing: error)
             }
@@ -53,9 +62,9 @@ final class FirmwareDiagnosticsViewModel: ObservableObject {
         }
     }
 
-    func checkFirmwareIfNeeded() {
+    func checkFirmwareIfNeeded(bridge: BridgeViewModel) {
         guard !hasCheckedFirmware else { return }
-        checkFirmware()
+        checkFirmware(bridge: bridge)
     }
 
     func inspectPackage() {
@@ -69,6 +78,7 @@ final class FirmwareDiagnosticsViewModel: ObservableObject {
             selectedPackage = data
             packageInfo = Vader5FirmwarePackageInspector.inspect(data: data, fileName: url.lastPathComponent)
             errorMessage = nil
+            ControllerDiagnostics.shared.record("Inspect firmware package", message: "Read \(url.lastPathComponent); \(data.count) bytes. No device access.")
         } catch {
             errorMessage = String(describing: error)
         }
@@ -86,6 +96,7 @@ final class FirmwareDiagnosticsViewModel: ObservableObject {
         panel.prompt = "Download"
         guard panel.runModal() == .OK, let destination = panel.url else { return }
 
+        ControllerDiagnostics.shared.record("Download firmware", stage: "started", message: "Module: \(module); version: \(release.version).")
         downloadingModule = module
         firmwareDownloadMessage = nil
         firmwareDownloadError = nil
@@ -96,6 +107,7 @@ final class FirmwareDiagnosticsViewModel: ObservableObject {
                     to: destination)
                 selectedPackage = try Data(contentsOf: destination)
                 packageInfo = info
+                ControllerDiagnostics.shared.record("Download firmware", stage: "completed", message: "\(info.fileName); SHA-256 \(info.sha256).")
                 firmwareDownloadMessage = "Saved \(module) \(release.version) as \(info.fileName) (SHA-256 \(info.sha256.prefix(12))…)."
             } catch {
                 firmwareDownloadError = String(describing: error)
@@ -105,6 +117,7 @@ final class FirmwareDiagnosticsViewModel: ObservableObject {
     }
 
     func runDryRun() {
+        ControllerDiagnostics.shared.record("Firmware protocol simulation", mode: .dryRun, stage: "started", message: "Scenario: \(scenario). Simulated transport only; does not establish device compatibility.")
         let selection: (Vader5SimulationScenario, Vader5DryRunPolicy) = switch scenario {
         case "CRC error": (.crcError(block: 0), .init())
         case "Timeout": (.timeout(block: 0), .init())
@@ -122,6 +135,7 @@ final class FirmwareDiagnosticsViewModel: ObservableObject {
             let result = try Vader5DiagnosticUpdater.run(
                 image: selectedPackage ?? sample, scenario: selected, policy: selection.1)
             events = result.events
+            ControllerDiagnostics.shared.record("Firmware protocol simulation", mode: .dryRun, stage: "completed", message: "Scenario: \(scenario); \(events.count) simulated events.")
             errorMessage = nil
         } catch {
             errorMessage = String(describing: error)
@@ -137,6 +151,7 @@ final class FirmwareDiagnosticsViewModel: ObservableObject {
 }
 
 struct FirmwareDiagnosticsView: View {
+    @ObservedObject var bridge: BridgeViewModel
     @StateObject private var model = FirmwareDiagnosticsViewModel()
 
     var body: some View {
@@ -195,7 +210,7 @@ struct FirmwareDiagnosticsView: View {
                     }
                     Spacer()
                     Button {
-                        model.checkFirmware()
+                        model.checkFirmware(bridge: bridge)
                     } label: {
                         if model.isCheckingFirmware {
                             ProgressView().controlSize(.small)

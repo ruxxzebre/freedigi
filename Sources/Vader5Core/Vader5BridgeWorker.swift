@@ -1,4 +1,5 @@
 import Foundation
+import ControllerProtocol
 
 /// Owns the bridge and all its HID/SDL state on a dedicated run loop. Virtual
 /// reports are forwarded there immediately; the UI receives at most 60 updates/s.
@@ -110,11 +111,11 @@ public final class Vader5BridgeWorker: @unchecked Sendable {
         try? synchronous { state.bridge.stop() }
     }
 
-    public func setLightingAsync(_ configuration: Vader5LightingConfiguration) async throws {
+    public func setLightingAsync(_ configuration: Vader5LightingConfiguration, mode: ControllerExecutionMode = .live) async throws {
         let state = self.state
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             enqueue {
-                do { try state.bridge.setLighting(configuration); continuation.resume() }
+                do { try state.bridge.setLighting(configuration, mode: mode); continuation.resume() }
                 catch { continuation.resume(throwing: error) }
             }
         }

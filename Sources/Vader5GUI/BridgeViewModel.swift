@@ -19,7 +19,9 @@ final class BridgeViewModel: ObservableObject {
     }
     @Published var status: Vader5BridgeStatus = .stopped
     @Published var state: Vader5State = .neutral
-    @Published var errorMessage: String?
+    @Published var errorMessage: String? {
+        didSet { if let errorMessage { ControllerDiagnostics.shared.record("App operation", mode: executionMode, stage: "failed", message: errorMessage) } }
+    }
     @Published var lightingStatus: Vader5LightingStatus = .checking
     @Published var lightingMode: Vader5LightingMode = .steady
     @Published var lightingColors: [Color] = [Color(red: 0, green: 116 / 255, blue: 1)]
@@ -39,8 +41,16 @@ final class BridgeViewModel: ObservableObject {
     @Published var dockSettingsLoaded = false
     @Published var isApplyingDockLighting = false
     @Published var isApplyingDockSettings = false
+    @Published var isReadingDock = false
     @Published var isApplyingLighting = false
     @Published var deviceBusy = false
+    @Published var dryRun = true {
+        didSet { ControllerDiagnostics.shared.record("Execution mode", mode: executionMode, message: dryRun ? "Writes will be previewed; reads and monitoring remain live." : "Hardware writes enabled.") }
+    }
+    @Published var operationMessage: String?
+    var executionMode: ControllerExecutionMode { dryRun ? .dryRun : .live }
+    var operationInProgress: Bool { deviceBusy || isApplyingLighting || isApplyingDockLighting || isApplyingDockSettings || isReadingDock }
+
 
     private let bridge = Vader5BridgeWorker()
     private let dock = FlydigiDock()
@@ -52,9 +62,13 @@ final class BridgeViewModel: ObservableObject {
     private var lightingDrafts: [Vader5LightingMode: LightingDraft] = [:]
 
     init() {
+        ControllerDiagnostics.shared.record("App session", mode: .dryRun, message: "Started with dry run enabled. Hardware reads remain live.")
         loadDockFactoryLighting(deviceType: 0)
         bridge.onStatus = { [weak self] status in
-            Task { @MainActor in self?.status = status }
+            Task { @MainActor in
+                self?.status = status
+                ControllerDiagnostics.shared.record("Input bridge", message: String(describing: status))
+            }
         }
         bridge.onState = { [weak self] state in
             Task { @MainActor in self?.state = state }
@@ -84,8 +98,9 @@ final class BridgeViewModel: ObservableObject {
     }
 
     func toggle() {
-        guard !deviceBusy else { return }
+        guard !operationInProgress else { return }
         errorMessage = nil
+        ControllerDiagnostics.shared.record("Input bridge request", message: "Transport: \(transport.rawValue); mode: \(mode.rawValue); action: \(isRunning ? "stop" : "start").")
         if isRunning {
             bridge.stop()
         } else {
@@ -98,13 +113,13 @@ final class BridgeViewModel: ObservableObject {
 
     var canSetLighting: Bool {
         if case .ready = lightingStatus {
-            return isRunning && !isApplyingLighting
+            return isRunning && !operationInProgress
         }
         return false
     }
 
     func applyLighting() {
-        guard !deviceBusy else { return }
+        guard !operationInProgress else { return }
         errorMessage = nil
         saveLightingDraft()
         let configuration = Vader5LightingConfiguration(
@@ -112,11 +127,14 @@ final class BridgeViewModel: ObservableObject {
             colors: lightingColors.map(rgbColor),
             brightness: UInt8(clamping: Int(lightingBrightness.rounded())),
             period: UInt8(clamping: Int(lightingPeriod.rounded())))
+        let mode = executionMode
+        operationMessage = nil
         isApplyingLighting = true
         Task {
             defer { isApplyingLighting = false }
             do {
-                try await bridge.setLightingAsync(configuration)
+                try await bridge.setLightingAsync(configuration, mode: mode)
+                operationMessage = mode == .dryRun ? "Lighting preview complete. No changes sent; see Diagnostics." : "Lighting commands sent. Check the effect on the controller."
             } catch {
                 errorMessage = String(describing: error)
             }
@@ -124,13 +142,12 @@ final class BridgeViewModel: ObservableObject {
     }
 
     var canSetDockLighting: Bool {
-        dockLightingStatus == .ready && !isApplyingDockLighting &&
+        (dryRun || dockLightingStatus == .ready) && !operationInProgress &&
             (dockLightingMode != .deviceDefault || dockFactoryLighting != nil)
     }
 
     var canSetDockDeviceSettings: Bool {
-        dockLightingStatus == .ready && dockSettingsLoaded &&
-            !isApplyingDockSettings
+        (dryRun || (dockLightingStatus == .ready && dockSettingsLoaded)) && !operationInProgress
     }
 
     var availableDockLightingModes: [FlydigiDockLightingMode] {
@@ -152,28 +169,34 @@ final class BridgeViewModel: ObservableObject {
     }
 
     func refreshDockConfiguration() {
+        guard !operationInProgress else { return }
+        isReadingDock = true
         dockLightingStatus = .checking
         dockSettingsLoaded = false
-        do {
-            let snapshot = try dock.readSnapshot()
-            if let deviceType = snapshot.deviceType {
-                dockDeviceType = deviceType
-                loadDockFactoryLighting(deviceType: deviceType)
-            }
-            if let settings = snapshot.settings {
-                dockDeviceSettings = settings
-                dockSettingsLoaded = true
-            }
-            if let configuration = snapshot.lighting {
-                loadDockLightingConfiguration(configuration)
-            }
-            dockLightingStatus = .ready
-        } catch {
-            dockLightingStatus = .unavailable(String(describing: error))
+        Task {
+            defer { isReadingDock = false }
+            do {
+                let snapshot = try await Task.detached(priority: .userInitiated) {
+                    try ControllerDiagnostics.shared.perform("Read dock configuration") { try FlydigiDock().readSnapshot() }
+                }.value
+                if let deviceType = snapshot.deviceType {
+                    dockDeviceType = deviceType
+                    loadDockFactoryLighting(deviceType: deviceType)
+                }
+                if let settings = snapshot.settings {
+                    dockDeviceSettings = settings
+                    dockSettingsLoaded = true
+                }
+                if let configuration = snapshot.lighting { loadDockLightingConfiguration(configuration) }
+                dockLightingStatus = .ready
+            } catch { dockLightingStatus = .unavailable(String(describing: error)) }
         }
     }
 
     func applyDockLighting() {
+        guard !operationInProgress else { return }
+        let mode = executionMode
+        operationMessage = nil
         errorMessage = nil
         let configuration: FlydigiDockLightingConfiguration
         if dockLightingMode == .deviceDefault {
@@ -206,13 +229,14 @@ final class BridgeViewModel: ObservableObject {
         Task {
             let result = await Task.detached(priority: .userInitiated) {
                 Result {
-                    try FlydigiDock().setLighting(configuration)
+                    try FlydigiDock().setLighting(configuration, mode: mode)
                 }
             }.value
             isApplyingDockLighting = false
             switch result {
             case .success:
-                dockLightingStatus = .ready
+                if mode == .live { dockLightingStatus = .ready }
+                operationMessage = mode == .dryRun ? "Dock lighting preview complete. No changes sent; see Diagnostics." : "Dock lighting acknowledged."
             case .failure(let error):
                 dockLightingStatus = .unavailable(String(describing: error))
                 errorMessage = String(describing: error)
@@ -226,15 +250,20 @@ final class BridgeViewModel: ObservableObject {
     }
 
     func applyDockDeviceSettings() {
+        guard !operationInProgress else { return }
         errorMessage = nil
+        operationMessage = nil
+        let mode = executionMode, settings = dockDeviceSettings
         isApplyingDockSettings = true
-        defer { isApplyingDockSettings = false }
-        do {
-            try dock.setDeviceSettings(dockDeviceSettings)
-            dockLightingStatus = .ready
-        } catch {
-            dockLightingStatus = .unavailable(String(describing: error))
-            errorMessage = String(describing: error)
+        Task {
+            defer { isApplyingDockSettings = false }
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try FlydigiDock().setDeviceSettings(settings, mode: mode)
+                }.value
+                if mode == .live { dockLightingStatus = .ready }
+                operationMessage = mode == .dryRun ? "Dock settings preview complete. No changes sent; see Diagnostics." : "Dock settings acknowledged."
+            } catch { errorMessage = String(describing: error) }
         }
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import ControllerProtocol
 import IOKit.hid
 import SDLGamepadC
 
@@ -57,6 +58,7 @@ public final class Vader5Bridge {
     private var ledConfig: [UInt8]?
     private var ledConfigsByMode: [Vader5LightingMode: [UInt8]] = [:]
     private var isRunning = false
+    private let traceID = UUID()
 
     public init() {}
 
@@ -177,7 +179,13 @@ public final class Vader5Bridge {
         }
     }
 
-    public func setLighting(_ configuration: Vader5LightingConfiguration) throws {
+    public func setLighting(_ configuration: Vader5LightingConfiguration, mode: ControllerExecutionMode = .live) throws {
+        try ControllerDiagnostics.shared.perform("Controller lighting", mode: mode, details: "Effect: \(configuration.mode); brightness: \(configuration.brightness); colors: \(configuration.colors).") {
+            try applyLighting(configuration, mode: mode)
+        }
+    }
+
+    private func applyLighting(_ configuration: Vader5LightingConfiguration, mode: ControllerExecutionMode) throws {
         if let sdlGamepad {
             guard configuration.mode == .steady, let color = configuration.colors.first else {
                 throw Vader5Error.lightingUnavailable(
@@ -187,6 +195,7 @@ public final class Vader5Bridge {
                 throw Vader5Error.lightingUnavailable(
                     "This Bluetooth profile does not expose lighting controls through SDL.")
             }
+            guard mode == .live else { return }
             guard CLSDLGamepadSetRGBLED(sdlGamepad, color.red, color.green, color.blue) else {
                 throw Vader5Error.sdl(String(cString: CLSDLGamepadError()))
             }
@@ -204,6 +213,13 @@ public final class Vader5Bridge {
         else {
             throw Vader5Error.lightingUnavailable(
                 "Lighting is available after ControlLab reads the controller's current USB configuration.")
+        }
+        ControllerDiagnostics.shared.record("Lighting plan", mode: mode, message: "\(packets.count) USB reports encoded.")
+        guard mode == .live else {
+            for packet in packets {
+                ControllerDiagnostics.shared.trace("Lighting plan", direction: "planned send", report: packet, operationID: traceID, mode: .dryRun)
+            }
+            return
         }
         for packet in packets {
             guard send(packet) == kIOReturnSuccess else { throw Vader5Error.lightingWrite }
@@ -270,6 +286,7 @@ public final class Vader5Bridge {
         guard let configDevice else { return kIOReturnNotOpen }
         var packet = [UInt8](repeating: 0, count: 32)
         for (index, byte) in prefix.enumerated() { packet[index] = byte }
+        ControllerDiagnostics.shared.trace("Input/lighting session", direction: "send", report: packet, operationID: traceID)
         return packet.withUnsafeBufferPointer {
             IOHIDDeviceSetReport(configDevice, kIOHIDReportTypeOutput, 0, $0.baseAddress!, $0.count)
         }
@@ -278,6 +295,7 @@ public final class Vader5Bridge {
     private func handle(_ report: UnsafePointer<UInt8>, length: Int) {
         let data = UnsafeBufferPointer(start: report, count: length)
         if let chunk = Vader5Protocol.parseLEDConfigChunk(data) {
+            ControllerDiagnostics.shared.trace("Input/lighting session", direction: "receive", report: Array(data), operationID: traceID)
             handleLEDConfigChunk(chunk)
             return
         }

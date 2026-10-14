@@ -33,6 +33,12 @@ mkdir -p "${app_dir}/Contents/MacOS" "${app_dir}/Contents/Resources/ThirdPartyNo
 cp "${binary}" "${app_dir}/Contents/MacOS/ControlLab"
 cp "${preview_binary}" "${app_dir}/Contents/MacOS/ControlLabRGBPreview"
 cp "${repo_dir}/Resources/Info.plist" "${app_dir}/Contents/Info.plist"
+source_revision="$(git -C "${repo_dir}" rev-parse --short HEAD 2>/dev/null || print development)"
+if [[ -n "$(git -C "${repo_dir}" status --porcelain 2>/dev/null)" ]]; then
+    source_revision="${source_revision}-modified"
+fi
+/usr/libexec/PlistBuddy -c "Add :ControlLabSourceRevision string ${source_revision}" "${app_dir}/Contents/Info.plist"
+
 cp "${repo_dir}/Sources/Vader5GUI/Resources/Vader5Pro-Official.png" \
     "${app_dir}/Contents/Resources/Vader5Pro-Official.png"
 cp "${repo_dir}/Sources/Vader5GUI/Resources/FlydigiDock2Pro-Official.jpg" \

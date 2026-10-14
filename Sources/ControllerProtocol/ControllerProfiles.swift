@@ -115,6 +115,25 @@ public struct ControllerProfile: Equatable, Sendable {
         restored.setDataVersion(dataVersion)
         return restored
     }
+    /// Shared validation and packet plan for preview and real profile writes.
+    public func writeReports(replacing original: ControllerProfile, slot: UInt8, persist: Bool) throws -> [[UInt8]] {
+        guard slot < 4, bytes.count == original.bytes.count,
+              bytes.prefix(3) == original.bytes.prefix(3), dataVersion == original.dataVersion else {
+            throw ControllerProtocolError.invalid("Profile format, slot or version changed.")
+        }
+        var reports: [[UInt8]] = []
+        for index in 0..<(bytes.count / 20) {
+            let range = (index * 20)..<(index * 20 + 20)
+            guard bytes[range] != original.bytes[range] else { continue }
+            reports.append(ControllerCommand.frame(0xa4, payload: [slot, UInt8(index), 1, 20]))
+            reports.append(ControllerCommand.frame(0xa5, payload: [0] + bytes[range]))
+        }
+        if persist {
+            let version = original.dataVersion &+ 1
+            reports.append(ControllerCommand.frame(0xa6, payload: [UInt8(truncatingIfNeeded: version), UInt8(version >> 8)]))
+        }
+        return reports
+    }
     mutating func setDataVersion(_ version: UInt16) {
         bytes[225] = UInt8(truncatingIfNeeded: version)
         bytes[226] = UInt8(version >> 8)
@@ -214,20 +233,11 @@ public final class ControllerProfileClient {
     public func apply(_ edited: ControllerProfile, replacing snapshot: ControllerProfileSnapshot,
                       persist: Bool) throws -> ControllerProfileSnapshot {
         let original = try snapshot.profile()
-        guard edited.bytes.count == original.bytes.count,
-              edited.bytes.prefix(3) == original.bytes.prefix(3),
-              edited.dataVersion == original.dataVersion else {
-            throw ControllerProtocolError.invalid("Profile format or version changed.")
-        }
+        let reports = try edited.writeReports(replacing: original, slot: snapshot.slot, persist: persist)
         guard try readActive() == snapshot else { throw ControllerProtocolError.conflict }
-        for index in 0..<(edited.bytes.count / 20) {
-            let range = (index * 20)..<(index * 20 + 20)
-            guard edited.bytes[range] != original.bytes[range] else { continue }
-            // A4 starts a segment; A5 indices restart at zero within that segment.
-            try channel.send(ControllerCommand.frame(0xa4, payload: [snapshot.slot, UInt8(index), 1, 20]))
-            _ = try response(0xa4)
-            try channel.send(ControllerCommand.frame(0xa5, payload: [0] + edited.bytes[range]))
-            _ = try response(0xa5)
+        for report in reports where report[2] != 0xa6 {
+            try channel.send(report)
+            _ = try response(report[2])
         }
         guard try read(slot: snapshot.slot) == edited else { throw ControllerProtocolError.verification }
         guard try activeSlot() == snapshot.slot, try identity() == snapshot.identity else {
@@ -236,7 +246,7 @@ public final class ControllerProfileClient {
         var expected = edited
         if persist {
             let version = original.dataVersion &+ 1
-            try channel.send(ControllerCommand.frame(0xa6, payload: [UInt8(truncatingIfNeeded: version), UInt8(version >> 8)]))
+            try channel.send(reports.last!)
             _ = try response(0xa6, timeout: 12)
             expected.setDataVersion(version)
         }

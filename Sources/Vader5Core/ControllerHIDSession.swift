@@ -11,6 +11,7 @@ final class ControllerHIDSession: ControllerChannel {
     private let buffer: UnsafeMutablePointer<UInt8>
     private var reports: [[UInt8]] = []
     private var readError: IOReturn?
+    private let traceID = UUID()
     let locationID: UInt32?
 
     init(vendor: Int = 0x37d7, product: Int? = nil, usagePage: Int? = 0xffa0,
@@ -46,6 +47,7 @@ final class ControllerHIDSession: ControllerChannel {
         runLoop = CFRunLoopGetCurrent()
         buffer = .allocate(capacity: 512)
         buffer.initialize(repeating: 0, count: 512)
+        ControllerDiagnostics.shared.record("HID session", message: "Opened vendor \(vendor), product \(product.map { String($0) } ?? "auto"), usage page \(usagePage.map { String($0) } ?? "any").", operationID: traceID)
         IOHIDDeviceRegisterInputReportCallback(device, buffer, 512, { pointer, result, _, _, _, report, length in
             guard let pointer else { return }
             let session = Unmanaged<ControllerHIDSession>.fromOpaque(pointer).takeUnretainedValue()
@@ -73,6 +75,7 @@ final class ControllerHIDSession: ControllerChannel {
 
     func send(_ report: [UInt8], reportID: CFIndex) throws {
         guard !report.isEmpty else { throw ControllerProtocolError.invalid("Empty HID report.") }
+        ControllerDiagnostics.shared.trace("HID session", direction: "send", report: report, operationID: traceID)
         let result = report.withUnsafeBufferPointer {
             IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, reportID, $0.baseAddress!, $0.count)
         }
@@ -87,7 +90,11 @@ final class ControllerHIDSession: ControllerChannel {
             guard remaining > 0 else { throw ControllerProtocolError.timeout }
             CFRunLoopRunInMode(.defaultMode, min(remaining, 0.025), true)
         }
-        return reports.removeFirst()
+        let report = reports.removeFirst()
+        if (report.count >= 3 && report.starts(with: [0x5a, 0xa5]) && report[2] != 0xef) || report.first == 5 {
+            ControllerDiagnostics.shared.trace("HID session", direction: "receive", report: report, operationID: traceID)
+        }
+        return report
     }
 }
 
@@ -104,6 +111,7 @@ extension ControllerHIDSession: FirmwareChannel {
 extension ControllerHIDSession: FirmwareFeatureChannel {
     func setFeature(_ report: [UInt8]) throws {
         guard let id = report.first else { throw ControllerProtocolError.invalid("Empty feature report.") }
+        ControllerDiagnostics.shared.trace("HID session", direction: "send", report: report, operationID: traceID)
         let result = report.withUnsafeBufferPointer {
             IOHIDDeviceSetReport(device, kIOHIDReportTypeFeature, CFIndex(id), $0.baseAddress!, $0.count)
         }
@@ -118,13 +126,28 @@ extension ControllerHIDSession: FirmwareFeatureChannel {
         }
         guard result == kIOReturnSuccess else { throw Vader5FirmwareReadError.requestFailed(result) }
         guard count == length else { throw ControllerProtocolError.invalid("Truncated bootloader feature report.") }
+        ControllerDiagnostics.shared.trace("HID session", direction: "feature receive", report: report, operationID: traceID)
         return report
     }
 }
 
 public enum Vader5Profiles {
     public static func readActive() throws -> ControllerProfileSnapshot {
-        try ControllerProfileClient(channel: ControllerHIDSession()).readActive()
+        try ControllerDiagnostics.shared.perform("Read profile") {
+            try ControllerProfileClient(channel: ControllerHIDSession()).readActive()
+        }
+    }
+
+    public static func preview(_ profile: ControllerProfile, replacing snapshot: ControllerProfileSnapshot, persist: Bool) throws -> Int {
+        try ControllerDiagnostics.shared.perform("Write profile", mode: .dryRun, details: "Profile \(snapshot.slot + 1); persist: \(persist). Uses the last read snapshot; no fresh device check.") {
+            let reports = try profile.writeReports(replacing: snapshot.profile(), slot: snapshot.slot, persist: persist)
+            let id = UUID()
+            for report in reports {
+                ControllerDiagnostics.shared.trace("Profile plan", direction: "planned send", report: report, operationID: id, mode: .dryRun)
+            }
+            ControllerDiagnostics.shared.record("Profile plan", mode: .dryRun, message: "\(reports.count) write reports planned; \(reports.filter { $0[2] == 0xa5 }.count) changed segments. Live execution verifies the current profile before writing and reads back before saving.")
+            return reports.count
+        }
     }
 
     /// The backup is written atomically before opening a device for mutation.
@@ -136,7 +159,28 @@ public enum Vader5Profiles {
             throw ControllerProtocolError.invalid("Backup already exists. Choose a new backup filename.")
         }
         try encoder.encode(snapshot).write(to: backupURL, options: .atomic)
-        return try ControllerProfileClient(channel: ControllerHIDSession())
-            .apply(profile, replacing: snapshot, persist: persist)
+        return try ControllerDiagnostics.shared.perform("Write profile", details: "Profile \(snapshot.slot + 1); persist: \(persist); backup: \(backupURL.lastPathComponent).") {
+            try ControllerProfileClient(channel: ControllerHIDSession()).apply(profile, replacing: snapshot, persist: persist)
+        }
+    }
+}
+
+public enum Vader5Calibration {
+    public static func preview(_ enabled: Bool, replacing snapshot: ControllerCalibrationSetting) throws {
+        let reports = try snapshot.reports(enabling: enabled)
+        ControllerDiagnostics.shared.write("Set automatic calibration", mode: .dryRun, reports: reports,
+            details: "Enabled: \(enabled). Uses last-read support/identity; live execution rechecks them and verifies readback.") {}
+    }
+
+    public static func read() throws -> ControllerCalibrationSetting {
+        try ControllerDiagnostics.shared.perform("Read calibration") {
+            try ControllerCalibrationClient(channel: ControllerHIDSession()).read()
+        }
+    }
+
+    public static func setEnabled(_ enabled: Bool, replacing snapshot: ControllerCalibrationSetting) throws -> ControllerCalibrationSetting {
+        try ControllerDiagnostics.shared.perform("Set automatic calibration", details: "Enabled: \(enabled).") {
+            try ControllerCalibrationClient(channel: ControllerHIDSession()).setEnabled(enabled, replacing: snapshot)
+        }
     }
 }

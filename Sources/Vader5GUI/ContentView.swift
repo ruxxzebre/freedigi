@@ -7,6 +7,7 @@ private enum WorkspacePage: String, CaseIterable {
     case configuration = "Configuration"
     case lighting = "Lighting"
     case firmware = "Firmware"
+    case diagnostics = "Diagnostics"
 
     var icon: String {
         switch self {
@@ -14,6 +15,7 @@ private enum WorkspacePage: String, CaseIterable {
         case .configuration: "slider.horizontal.3"
         case .lighting: "lightbulb.led.fill"
         case .firmware: "memorychip.fill"
+        case .diagnostics: "list.bullet.rectangle"
         }
     }
 
@@ -23,6 +25,7 @@ private enum WorkspacePage: String, CaseIterable {
         case .configuration: "Profiles, mappings, sticks, gyro, and triggers"
         case .lighting: "RGB effects and device presets"
         case .firmware: "Versions, packages, and safe diagnostics"
+        case .diagnostics: "Operations, device information and exportable logs"
         }
     }
 }
@@ -46,6 +49,13 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 topBar
                 Divider().overlay(CLTheme.border)
+                if model.dryRun {
+                    Text("Dry run: settings and firmware writes are previewed. Reads and input monitoring remain live.")
+                        .font(.caption).foregroundStyle(.orange).padding(8)
+                }
+                if let message = model.operationMessage {
+                    Text(message).font(.caption).textSelection(.enabled).padding(8)
+                }
                 pageContent
             }
         }
@@ -106,6 +116,11 @@ struct ContentView: View {
             .padding(.horizontal, 10)
 
             Spacer()
+            Toggle("Dry run", isOn: $model.dryRun)
+                .toggleStyle(.switch)
+                .fixedSize()
+                .disabled(model.operationInProgress)
+                .help("Preview settings and firmware writes. Device reads and live input monitoring still communicate with hardware.")
 
             VStack(alignment: .leading, spacing: 11) {
                 Picker("Connection", selection: $model.transport) {
@@ -166,6 +181,7 @@ struct ContentView: View {
         case .lighting: lightingPage
         case .firmware:
             FirmwareInstallView(bridge: model).background(CLTheme.background)
+        case .diagnostics: OperationLogView(model: model)
         }
     }
 
@@ -312,7 +328,7 @@ struct ContentView: View {
                 Button { model.applyLighting() } label: {
                     Label(
                         model.isApplyingLighting
-                            ? "Applying…" : "Apply to controller",
+                            ? "Applying…" : (model.dryRun ? "Preview controller lighting" : "Apply to controller"),
                         systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
                 }
@@ -442,14 +458,14 @@ struct ContentView: View {
                             .buttonStyle(.bordered)
                             .disabled(model.isApplyingDockLighting)
                             Button { model.turnOffDockLighting() } label: {
-                                Label("Turn off", systemImage: "power")
+                                Label(model.dryRun ? "Preview off" : "Turn off", systemImage: "power")
                             }
                             .buttonStyle(.bordered)
                             .disabled(!model.canSetDockLighting)
                         }
                         Button { model.applyDockLighting() } label: {
                             Label(
-                                model.isApplyingDockLighting ? "Applying…" : "Apply lighting",
+                                model.isApplyingDockLighting ? "Applying…" : (model.dryRun ? "Preview lighting" : "Apply lighting"),
                                 systemImage: "sparkles")
                                 .frame(maxWidth: .infinity)
                         }
@@ -497,7 +513,7 @@ struct ContentView: View {
                         Label(
                             model.isApplyingDockSettings
                                 ? "Saving behavior…"
-                                : "Apply device behavior",
+                                : (model.dryRun ? "Preview device behavior" : "Apply device behavior"),
                             systemImage: "checkmark.circle")
                     }
                     .buttonStyle(.bordered)
@@ -584,7 +600,9 @@ private struct SidebarButton: View {
             }
             .foregroundStyle(selected ? .white : .secondary)
             .padding(.horizontal, 12).frame(height: 40)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(selected ? CLTheme.accent.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

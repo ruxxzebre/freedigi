@@ -30,11 +30,12 @@ struct DeviceProfilesView: View {
                 HStack {
                     Button("Read active profile") { read() }
                     Button("Export backup…") { export() }.disabled(snapshot == nil)
+                    Button("Restore backup…") { restore() }.disabled(snapshot == nil)
                     if let backupURL {
                         Button("Show last backup") { NSWorkspace.shared.activateFileViewerSelecting([backupURL]) }
                     }
                 }
-                .disabled(model.deviceBusy)
+                .disabled(model.operationInProgress)
                 if let snapshot, let edited {
                     Text("Profile \(Int(snapshot.slot) + 1) · Vader 5 device \(snapshot.identity.deviceID)")
                         .font(.headline)
@@ -51,13 +52,13 @@ struct DeviceProfilesView: View {
                             do {
                                 try self.edited?.map(source, to: destination)
                                 message = "Mapping staged. Apply or save to send it to the controller."
-                            } catch { self.error = String(describing: error) }
+                            } catch { self.error = String(describing: error); ControllerDiagnostics.shared.record("Profile UI", stage: "failed", message: String(describing: error)) }
                         }
                     }
                     Text(mappingDescription(edited)).font(.caption).foregroundStyle(.secondary)
                     HStack {
-                        Button("Apply until restart") { apply(persist: false) }
-                        Button("Save to controller") { apply(persist: true) }
+                        Button(model.dryRun ? "Preview temporary changes" : "Apply until restart") { apply(persist: false) }
+                        Button(model.dryRun ? "Preview save" : "Save to controller") { apply(persist: true) }
                             .buttonStyle(.borderedProminent)
                     }
                     Text("Each write creates a backup and verifies the result by reading it back. Live monitoring stops while profiles are accessed. Select another PC profile on the controller, then read it here.")
@@ -65,11 +66,12 @@ struct DeviceProfilesView: View {
                 }
                 if model.deviceBusy { ProgressView("Accessing controller…") }
                 if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+                CalibrationView(model: model)
                 DisclosureGroup("Advanced local drafts (not sent to the controller)") {
                     ControllerConfigurationView(state: model.state)
                 }
             }
-            .disabled(model.deviceBusy)
+            .disabled(model.operationInProgress)
             .padding(24)
         }
     }
@@ -90,7 +92,7 @@ struct DeviceProfilesView: View {
     }
 
     private func read() {
-        guard !model.deviceBusy else { return }
+        guard !model.operationInProgress else { return }
         model.deviceBusy = true
         model.stop()
         error = nil
@@ -100,15 +102,23 @@ struct DeviceProfilesView: View {
                 let value = try await Task.detached(priority: .userInitiated) { try Vader5Profiles.readActive() }.value
                 try load(value)
                 message = "Read profile \(Int(value.slot) + 1). Changes below are staged until you apply or save."
-            } catch { self.error = String(describing: error) }
+            } catch { self.error = String(describing: error); ControllerDiagnostics.shared.record("Profile UI", stage: "failed", message: String(describing: error)) }
         }
     }
 
     private func apply(persist: Bool) {
-        guard !model.deviceBusy, let snapshot, var profile = edited else { return }
+        guard !model.operationInProgress, let snapshot, var profile = edited else { return }
         do { try profile.setTitle(title) }
-        catch { self.error = String(describing: error); return }
+        catch { self.error = String(describing: error); ControllerDiagnostics.shared.record("Profile UI", stage: "failed", message: String(describing: error)); return }
         profile.setVibrationEnabled(vibration)
+        if model.dryRun {
+            do {
+                let count = try Vader5Profiles.preview(profile, replacing: snapshot, persist: persist)
+                error = nil
+                message = "Dry run: \(count) write reports planned from the last read profile. Nothing sent or saved. See Diagnostics."
+            } catch { self.error = String(describing: error); ControllerDiagnostics.shared.record("Profile UI", stage: "failed", message: String(describing: error)) }
+            return
+        }
         let requested = profile
         model.deviceBusy = true
         model.stop()
@@ -145,6 +155,30 @@ struct DeviceProfilesView: View {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(snapshot).write(to: url, options: .atomic)
             backupURL = url
-        } catch { self.error = String(describing: error) }
+            ControllerDiagnostics.shared.record("Export profile", message: "Exported \(url.lastPathComponent).")
+        } catch { self.error = String(describing: error); ControllerDiagnostics.shared.record("Profile UI", stage: "failed", message: String(describing: error)) }
+    }
+
+    private func restore() {
+        guard !model.operationInProgress, let snapshot else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Load a backup for this controller and profile. Review it, then apply or save."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let backup = try JSONDecoder().decode(ControllerProfileSnapshot.self, from: Data(contentsOf: url))
+            guard backup.identity == snapshot.identity, backup.slot == snapshot.slot else {
+                throw ControllerProtocolError.conflict
+            }
+            let restored = try snapshot.profile().restoringContents(from: backup.profile())
+            edited = restored
+            title = restored.title
+            vibration = restored.vibrationEnabled
+            error = nil
+            ControllerDiagnostics.shared.record("Restore profile", stage: "staged", message: "Loaded \(url.lastPathComponent). No device writes yet.")
+            message = "Backup staged. Apply until restart or Save to controller to restore it."
+        } catch { self.error = String(describing: error); ControllerDiagnostics.shared.record("Profile UI", stage: "failed", message: String(describing: error)) }
     }
 }

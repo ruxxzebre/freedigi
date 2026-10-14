@@ -55,6 +55,19 @@ public enum Vader5FirmwareInstaller {
     }
 
     public static func prepare(module: Vader5FirmwareModule) async throws -> Vader5PreparedFirmware {
+        let id = UUID(), start = ProcessInfo.processInfo.systemUptime
+        ControllerDiagnostics.shared.record("Prepare firmware", stage: "started", message: "Module: \(module.rawValue). Read device and download official package; no firmware write.", operationID: id)
+        do {
+            let result = try await preparePackage(module: module)
+            ControllerDiagnostics.shared.record("Prepare firmware", stage: "completed", message: "\(result.installedVersion) -> \(result.release.version); \(result.byteCount) bytes; SHA-256 \(result.sha256).", operationID: id, elapsedMilliseconds: (ProcessInfo.processInfo.systemUptime - start) * 1000)
+            return result
+        } catch {
+            ControllerDiagnostics.shared.record("Prepare firmware", stage: "failed", message: String(describing: error), operationID: id, elapsedMilliseconds: (ProcessInfo.processInfo.systemUptime - start) * 1000)
+            throw error
+        }
+    }
+
+    private static func preparePackage(module: Vader5FirmwareModule) async throws -> Vader5PreparedFirmware {
         let device = try await Task.detached(priority: .userInitiated) {
             try readInfo(ControllerHIDSession())
         }.value
@@ -105,8 +118,26 @@ public enum Vader5FirmwareInstaller {
 
     /// Synchronous, run on a dedicated background thread. Progress is 0...1.
     /// A transfer completing is not success until the normal firmware version matches.
-    public static func install(_ prepared: Vader5PreparedFirmware,
+    public static func install(_ prepared: Vader5PreparedFirmware, mode: ControllerExecutionMode = .live,
                                progress: @Sendable (String, Double) -> Void = { _, _ in }) throws {
+        try ControllerDiagnostics.shared.perform("Install firmware", mode: mode,
+            details: "Module: \(prepared.module.rawValue); \(prepared.installedVersion) -> \(prepared.release.version); \(prepared.byteCount) bytes; SHA-256 \(prepared.sha256).") {
+            if mode == .dryRun {
+                ControllerDiagnostics.shared.record("Firmware plan", mode: .dryRun, stage: "previewed", message: "Would recheck identity/version/USB port, enter the matching bootloader, transfer and verify, then wait for the expected installed version. No device opened, no boot command or image sent. This preview cannot validate bootloader compatibility or acknowledgements.")
+                progress("Update plan previewed; no firmware written", 1)
+                return
+            }
+            let filter = ControllerProgressFilter()
+            try installLive(prepared) { stage, fraction in
+                guard filter.accept(stage: stage, fraction: fraction) else { return }
+                ControllerDiagnostics.shared.record("Firmware progress", stage: "progress", message: "\(stage): \(Int(fraction * 100))%")
+                progress(stage, fraction)
+            }
+        }
+    }
+
+    private static func installLive(_ prepared: Vader5PreparedFirmware,
+                               progress: @Sendable (String, Double) -> Void) throws {
         let activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: "Controller firmware update")
         defer { ProcessInfo.processInfo.endActivity(activity) }
         try enterUpdateMode(prepared)

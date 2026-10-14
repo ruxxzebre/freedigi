@@ -1,4 +1,5 @@
 import Foundation
+import ControllerProtocol
 import IOKit.hid
 
 public enum FlydigiDockError: Error, CustomStringConvertible, Sendable {
@@ -32,6 +33,7 @@ public enum FlydigiDockError: Error, CustomStringConvertible, Sendable {
 }
 
 public final class FlydigiDock {
+    private let traceID = UUID()
     public init() {}
 
     public func isConnected() throws -> Bool {
@@ -49,9 +51,10 @@ public final class FlydigiDock {
     }
 
     public func setLighting(
-        _ configuration: FlydigiDockLightingConfiguration
+        _ configuration: FlydigiDockLightingConfiguration, mode: ControllerExecutionMode = .live
     ) throws {
-        try send(FlydigiDockProtocol.reports(configuration: configuration))
+        let reports = try FlydigiDockProtocol.reports(configuration: configuration)
+        try ControllerDiagnostics.shared.write("Dock lighting", mode: mode, reports: reports, details: "Effect: \(configuration.mode); brightness: \(configuration.brightness).") { try send(reports) }
     }
 
     public func setPixels(
@@ -63,9 +66,9 @@ public final class FlydigiDock {
     }
 
     public func setDeviceSettings(
-        _ settings: FlydigiDockDeviceSettings
+        _ settings: FlydigiDockDeviceSettings, mode: ControllerExecutionMode = .live
     ) throws {
-        try send([
+        let reports = [
             FlydigiDockProtocol.deviceSettingReport(
                 .sleepWhenCharging, enabled: settings.sleepWhenCharging),
             FlydigiDockProtocol.deviceSettingReport(
@@ -75,7 +78,8 @@ public final class FlydigiDock {
             FlydigiDockProtocol.deviceSettingReport(
                 .showAnimationWhenCharging,
                 enabled: settings.showAnimationWhenCharging),
-        ])
+        ]
+        try ControllerDiagnostics.shared.write("Dock settings", mode: mode, reports: reports, details: String(describing: settings)) { try send(reports) }
     }
 
     public func readSnapshot(timeout: TimeInterval = 0.8) throws -> FlydigiDockSnapshot {
@@ -171,6 +175,9 @@ public final class FlydigiDock {
                     throw FlydigiDockError.acknowledgementTimeout(
                         command: command)
                 }
+                if let acknowledgement {
+                    ControllerDiagnostics.shared.trace("Dock session", direction: "receive", report: acknowledgement, operationID: traceID)
+                }
                 // Space Station's Charger SDK accepts an acknowledgement when
                 // its command byte matches. Byte 4 is command-specific data
                 // (the 0x62 packet acknowledgement uses it as an index), not a
@@ -184,6 +191,7 @@ public final class FlydigiDock {
         to device: IOHIDDevice,
         index: Int
     ) throws {
+        ControllerDiagnostics.shared.trace("Dock session", direction: "send", report: report, operationID: traceID)
         let result = report.withUnsafeBufferPointer {
             IOHIDDeviceSetReport(
                 device, kIOHIDReportTypeOutput, 0,

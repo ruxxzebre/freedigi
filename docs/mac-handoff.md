@@ -1,9 +1,10 @@
 # Mac build and device validation
 
-The new code has portable Linux tests. It has not yet been compiled against
-Apple's SDK or tested on a physical controller in this session. A Mac build and
-the checks below are still required. Earlier README hardware results apply to
-the pre-existing input/lighting implementation, not these changes.
+The user built and opened revision `de74fc8` on a Mac and reported that connection
+and controller lighting work through the USB dongle. That does not establish
+profile persistence, calibration, firmware flashing or system-wide game input.
+The subsequent diagnostics/calibration changes have portable Linux tests and
+syntax checks; their Apple SDK build and hardware checks are still required.
 
 ## Build on the laptop
 
@@ -98,3 +99,48 @@ and hashes are in `Tests/ControllerProtocolTests/Fixtures`.
 does not validate SwiftUI APIs, IOKit linking, Apple SDK concurrency annotations,
 code signing, entitlements, or hardware behavior. The Mac script resolves the
 build portion of that remaining work.
+
+
+## Diagnostics and dry runs
+
+New app sessions start with **Dry run** enabled in the sidebar. A persistent
+banner distinguishes preview mode. Profile apply/save/restore, automatic
+calibration, controller lighting, dock lighting/behavior, and prepared firmware
+installation have preview paths. Turn Dry run off to enable actual writes.
+Read operations, firmware downloads, live input monitoring and its handshake
+still communicate with devices/services. This is a write-preview mode, not an
+offline emulator. Profile and calibration previews use the last-read snapshot;
+controller lighting uses the current lighting configuration. Firmware preview
+requires a prepared package and does not enter a bootloader or prove hardware
+compatibility. The separate protocol simulator remains explicitly simulated.
+
+**Diagnostics** shows bounded session history (2,000 entries, latest 200 displayed)
+with modes, outcomes, operation IDs and durations, plus interface enumeration and
+JSON export. Packet tracing is opt-in, bounded to 64 bytes per event, and excludes
+live gamepad input reports. Profile names, mappings and identifiers may appear
+in traces; review the export before sharing. Logs live in memory until exported
+and are lost when the app quits. Firmware UI progress is coalesced by stage and
+whole percent so block-level transfers do not flood the main actor.
+
+Automatic stick calibration reads NewXInput command 0x03 support/enabled bit 5,
+and writes command 0x13/subcommand 6 only when supported. Live writes recheck
+identity and the previous setting, then verify readback. Reconnect and read again
+to validate persistence. Source: Engine 5.0.1.6 recovered SDK factories
+`ReadHardwareFunctionStatusCommandFactory` and
+`EnableJoystickAutoCalibrationCommandFactory`.
+
+Manual ADC calibration is not exposed: the recovered SDK has a factory 0xF0
+start/stop command, while the current web UI uses a newer protocol and additional
+readiness indicators. The correct Vader 5 workflow and completion verification
+still need validation. Advanced curves, gyro and macro editing remain drafts.
+
+The requested Wails/React rewrite is deferred until backend feature work and
+validation are complete. No replacement frontend agent has been started. Keep
+native HID timing/firmware work behind a stable backend interface when that phase
+begins; do not move report forwarding onto the web UI thread.
+
+For the next Mac check: click the empty/right side of each sidebar row; read a
+profile; stage a mapping/restore and preview both temporary and saved writes;
+read/preview automatic calibration if advertised; preview lighting with Dry run
+on and confirm the LEDs do not change; inspect/export the session log. Physical
+writes remain separately unverified beyond the previously reported lighting.

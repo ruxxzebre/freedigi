@@ -83,6 +83,8 @@ let package = Package(
                 "ControlLabApp.swift",
                 "ControllerConfigurationView.swift",
                 "DeviceProfilesView.swift",
+                "CalibrationView.swift",
+                "OperationLogView.swift",
                 "ControllerInputView.swift",
                 "DockFactoryLightingStore.swift",
                 "FirmwareDiagnosticsView.swift",
