@@ -44,6 +44,7 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("IOKit"),
                 .linkedFramework("CoreFoundation"),
+                .linkedFramework("Security"),
             ]
         ),
         .target(
@@ -70,6 +71,7 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("SwiftUI"),
+                .linkedFramework("GameController"),
             ]
         ),
         .executableTarget(
@@ -83,6 +85,7 @@ let package = Package(
                 "ControlLabApp.swift",
                 "ControllerConfigurationView.swift",
                 "DeviceProfilesView.swift",
+                "GameCompatibilityView.swift",
                 "CalibrationView.swift",
                 "OperationLogView.swift",
                 "ControllerInputView.swift",

@@ -19,7 +19,7 @@ struct OperationLogView: View {
                     Text("Profiles and automatic stick calibration: implemented; device readback required after writes. Manual calibration is not implemented.")
                     Text("Firmware: native transfer paths are experimental; real flashing remains unverified. Jieli .ufw and unknown bootloader transitions are unsupported.")
                     Text("Advanced stick/trigger curves, gyro and macros: local drafts only.")
-                    Text("Virtual gamepad: requires Apple's approved virtual-HID entitlement. Lighting access does not establish game compatibility.")
+                    Text("Native gamepad: Xbox-compatible and generic HID output are experimental. An approved virtual-HID profile is required; device creation does not establish game compatibility. Use Game compatibility to inspect report delivery and Apple's game-facing input API.")
                     Text("Dry run: validates and previews supported settings writes. Firmware preview describes the prepared update; it does not prove bootloader compatibility. The separate firmware simulator uses a simulated transport.")
                 }.font(.caption).foregroundStyle(.secondary)
             }
@@ -76,6 +76,8 @@ struct OperationLogView: View {
             "Execution mode": model.executionMode.rawValue,
             "Operation in progress": String(model.operationInProgress),
             "App error": model.errorMessage ?? "none",
+            "Native signing": NativeGamepadDiagnostics.signingStatus,
+            "Native output": String(describing: NativeGamepadDiagnostics.shared.snapshot()),
         ])
         NSPasteboard.general.clearContents()
         message = NSPasteboard.general.setString(summary, forType: .string)

@@ -118,9 +118,9 @@ public final class Vader5BridgeWorker: @unchecked Sendable {
         try box.result!.get()
     }
 
-    public func start(mode: Vader5BridgeMode, transport: Vader5Transport) throws {
+    public func start(mode: Vader5BridgeMode, transport: Vader5Transport, previewOutput: Bool = false) throws {
         let state = self.state
-        try synchronous { try state.bridge.start(mode: mode, transport: transport) }
+        try synchronous { try state.bridge.start(mode: mode, transport: transport, previewOutput: previewOutput) }
     }
 
     public func stop() {

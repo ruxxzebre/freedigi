@@ -6,6 +6,7 @@ import SDLGamepadC
 public enum Vader5BridgeMode: String, CaseIterable, Sendable {
     case monitor = "Monitor only"
     case virtualGamepad = "Virtual gamepad"
+    case xboxGamepad = "Xbox-compatible gamepad"
 }
 
 public enum Vader5Transport: String, CaseIterable, Sendable {
@@ -24,13 +25,15 @@ public enum Vader5Error: Error, CustomStringConvertible {
     case notFound(Vader5Transport), configInterfaceMissing, virtualDeviceCreation, handshake
     case managerOpen(IOReturn), deviceOpen(IOReturn)
     case sdl(String), lightingUnavailable(String), lightingWrite
+    case virtualReport(Int32)
 
     public var description: String {
         switch self {
         case .notFound(.usbReceiver): "Vader 5 Pro USB receiver not found."
         case .notFound(.bluetooth): "Bluetooth controller not found. Pair the Vader 5 Pro in Xbox-compatible mode and wake it, then try again."
         case .configInterfaceMissing: "Vader 5 Pro controller interface not found."
-        case .virtualDeviceCreation: "Virtual gamepad permission is unavailable. Sign with Apple's com.apple.developer.hid.virtual.device entitlement or use Monitor only."
+        case .virtualDeviceCreation: "macOS refused virtual gamepad creation. Check the running signature and approved virtual-HID provisioning profile in Game compatibility. Creation alone does not prove game support."
+        case .virtualReport(let code): "macOS rejected a virtual gamepad report (0x\(String(UInt32(bitPattern: code), radix: 16))). Output stopped."
         case .handshake: "Controller initialization handshake failed."
         case .managerOpen(let code): "Could not open HID manager (0x\(String(UInt32(bitPattern: code), radix: 16)))."
         case .deviceOpen(let code): "Could not open receiver (0x\(String(UInt32(bitPattern: code), radix: 16)))."
@@ -64,7 +67,8 @@ public final class Vader5Bridge {
 
     public func start(
         mode: Vader5BridgeMode,
-        transport: Vader5Transport = .usbReceiver
+        transport: Vader5Transport = .usbReceiver,
+        previewOutput: Bool = false
     ) throws {
         guard !isRunning else { return }
         onStatus?(.connecting)
@@ -102,8 +106,8 @@ public final class Vader5Bridge {
             let deviceResult = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone))
             guard deviceResult == kIOReturnSuccess else { throw Vader5Error.deviceOpen(deviceResult) }
 
-            if effectiveMode == .virtualGamepad {
-                let output = VirtualGamepad()
+            if effectiveMode != .monitor {
+                let output = VirtualGamepad(xboxCompatible: effectiveMode == .xboxGamepad, dryRun: previewOutput)
                 try output.start()
                 virtualGamepad = output
             }
@@ -121,7 +125,16 @@ public final class Vader5Bridge {
             )
             IOHIDDeviceScheduleWithRunLoop(
                 device, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+            IOHIDDeviceRegisterRemovalCallback(device, { context, _, _ in
+                guard let context else { return }
+                let bridge = Unmanaged<Vader5Bridge>.fromOpaque(context).takeUnretainedValue()
+                bridge.stop()
+                bridge.onStatus?(.failed("USB receiver disconnected. Monitoring and any virtual output have stopped."))
+            }, Unmanaged.passUnretained(self).toOpaque())
             try initializeController()
+            // Initialization services the run loop; removal/report failure may
+            // have stopped the bridge from a callback while it was running.
+            guard configDevice != nil else { throw Vader5Error.handshake }
             isRunning = true
             onStatus?(.running(effectiveMode))
             onLightingStatus?(.checking)
@@ -135,6 +148,7 @@ public final class Vader5Bridge {
 
     public func stop() {
         if let configDevice {
+            IOHIDDeviceRegisterRemovalCallback(configDevice, nil, nil)
             let result = send(Vader5Protocol.stopCommand)
             ControllerDiagnostics.shared.record("Input bridge", stage: "stopping",
                 message: "Stream-stop request returned \(String(format: "0x%08X", UInt32(bitPattern: result))); closing monitoring interface.")
@@ -392,7 +406,12 @@ public final class Vader5Bridge {
     }
 
     private func publish(_ state: Vader5State) {
-        virtualGamepad?.send(state)
+        do { try virtualGamepad?.send(state) }
+        catch {
+            stop()
+            onStatus?(.failed(String(describing: error)))
+            return
+        }
         onState?(state)
     }
 

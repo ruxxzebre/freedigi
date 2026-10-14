@@ -1,9 +1,20 @@
 import Foundation
 import IOKit.hid
 import Vader5CoreC
+import ControllerProtocol
 
 final class VirtualGamepad {
     private var device: UnsafeMutableRawPointer?
+    private var started = false
+    private let xboxCompatible: Bool
+    private let dryRun: Bool
+    private let traceID = UUID()
+    private let diagnostics = NativeGamepadDiagnostics.shared
+
+    init(xboxCompatible: Bool = false, dryRun: Bool = false) {
+        self.xboxCompatible = xboxCompatible
+        self.dryRun = dryRun
+    }
 
     private static let descriptor: [UInt8] = [
         0x05, 0x01, 0x09, 0x05, 0xA1, 0x01, 0x85, 0x01,
@@ -21,31 +32,74 @@ final class VirtualGamepad {
     ]
 
     func start() throws {
+        started = true
+        diagnostics.begin(profile: xboxCompatible ? "Xbox-compatible · 045e:02fd" : "Generic HID · 37d7:2401", dryRun: dryRun)
+        ControllerDiagnostics.shared.record("Native gamepad", mode: dryRun ? .dryRun : .live,
+            stage: "starting", message: "\(diagnostics.snapshot().profile). \(NativeGamepadDiagnostics.signingStatus).", operationID: traceID)
+        if dryRun {
+            try send(.neutral)
+            return
+        }
         let properties: [String: Any] = [
-            kIOHIDReportDescriptorKey: Data(Self.descriptor),
-            kIOHIDTransportKey: "Virtual",
+            kIOHIDReportDescriptorKey: Data(xboxCompatible ? XboxCompatibleReport.descriptor : Self.descriptor),
+            kIOHIDTransportKey: xboxCompatible ? "Bluetooth" : "Virtual",
             kIOHIDManufacturerKey: "ControlLab",
-            kIOHIDProductKey: "Vader 5 Pro Virtual Gamepad",
-            kIOHIDVendorIDKey: Vader5Protocol.vendorID,
-            kIOHIDProductIDKey: Vader5Protocol.productID,
+            kIOHIDProductKey: xboxCompatible ? "Xbox Wireless Controller" : "Vader 5 Pro Virtual Gamepad",
+            kIOHIDVendorIDKey: xboxCompatible ? XboxCompatibleReport.vendorID : Vader5Protocol.vendorID,
+            kIOHIDProductIDKey: xboxCompatible ? XboxCompatibleReport.productID : Vader5Protocol.productID,
+            kIOHIDPrimaryUsagePageKey: 1,
+            kIOHIDPrimaryUsageKey: 5,
             kIOHIDVersionNumberKey: 1,
             kIOHIDSerialNumberKey: "VADER5-MACOS",
         ]
         device = V5VirtualHIDCreate(properties as CFDictionary)
-        guard device != nil else { throw Vader5Error.virtualDeviceCreation }
+        guard device != nil else {
+            diagnostics.failed(Vader5Error.virtualDeviceCreation.description)
+            ControllerDiagnostics.shared.record("Native gamepad", stage: "failed", message: Vader5Error.virtualDeviceCreation.description, operationID: traceID)
+            throw Vader5Error.virtualDeviceCreation
+        }
+        diagnostics.created()
+        try send(.neutral)
+        ControllerDiagnostics.shared.record("Native gamepad", stage: "created",
+            message: "Virtual HID device created and neutral report accepted. GameController/SDL/game recognition still needs checking.", operationID: traceID)
     }
 
-    func send(_ state: Vader5State) {
-        guard let device else { return }
-        let report = Vader5Protocol.virtualReport(for: state)
-        report.withUnsafeBufferPointer {
-            _ = V5VirtualHIDHandleReport(device, $0.baseAddress!, $0.count)
+    func send(_ state: Vader5State) throws {
+        let report: [UInt8]
+        if xboxCompatible {
+            var input = ControllerMappingInput()
+            _ = input.update(buttonBits: state.buttons.rawValue, dpad: state.dpad,
+                             leftTrigger: state.leftTrigger, rightTrigger: state.rightTrigger)
+            report = XboxCompatibleReport.encode(leftX: state.leftX, leftY: state.leftY,
+                rightX: state.rightX, rightY: state.rightY, leftTrigger: state.leftTrigger,
+                rightTrigger: state.rightTrigger, dpad: state.dpad, buttons: input.held)
+        } else {
+            report = Vader5Protocol.virtualReport(for: state)
         }
+        if dryRun { diagnostics.preview(); return }
+        guard let device else { throw Vader5Error.virtualDeviceCreation }
+        let result = report.withUnsafeBufferPointer {
+            V5VirtualHIDHandleReport(device, $0.baseAddress!, $0.count)
+        }
+        guard result == 0 else {
+            let error = Vader5Error.virtualReport(result)
+            diagnostics.failed(error.description, report: true)
+            ControllerDiagnostics.shared.record("Native gamepad", stage: "failed", message: error.description, operationID: traceID)
+            throw error
+        }
+        diagnostics.accepted()
     }
 
     func stop() {
+        guard started else { return }
+        started = false
+        if device != nil { try? send(.neutral) }
         if let device { V5VirtualHIDRelease(device) }
         device = nil
+        diagnostics.stopped()
+        let state = diagnostics.snapshot()
+        ControllerDiagnostics.shared.record("Native gamepad", mode: dryRun ? .dryRun : .live, stage: "stopped",
+            message: "Accepted \(state.acceptedReports), rejected \(state.rejectedReports), previewed \(state.previewedReports) reports. Virtual device released.", operationID: traceID)
     }
 
     deinit { stop() }

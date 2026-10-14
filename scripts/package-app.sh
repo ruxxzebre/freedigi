@@ -6,6 +6,7 @@ configuration="${CONFIGURATION:-release}"
 case "$configuration" in debug|release) ;; *) print -u2 'CONFIGURATION must be debug or release.'; exit 1 ;; esac
 app_dir="${repo_dir}/build/ControlLab.app"
 sdl_framework="${repo_dir}/Vendor/SDL3.xcframework/macos-arm64_x86_64/SDL3.framework"
+bundle_identifier="${APP_BUNDLE_IDENTIFIER:-io.github.dracinn.controllab}"
 
 cd "${repo_dir}"
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -17,6 +18,12 @@ if [[ "${ENABLE_VIRTUAL_HID:-0}" == "1" ]]; then
         print -u2 "Virtual HID requires SIGNING_IDENTITY and an approved PROVISIONING_PROFILE file."
         exit 1
     fi
+    mkdir -p "${repo_dir}/.build/signing"
+    signing_profile="${repo_dir}/.build/signing/profile.plist"
+    signing_entitlements="${repo_dir}/.build/signing/ControlLab.entitlements"
+    security cms -D -i "${PROVISIONING_PROFILE}" > "${signing_profile}"
+    swift "${repo_dir}/scripts/prepare-native-signing.swift" \
+        "${signing_profile}" "${bundle_identifier}" "${signing_entitlements}"
 fi
 swift_build_args=(--build-system native --scratch-path .build/native -c "${configuration}" -Xswiftc -enable-testing)
 if [[ "${SWIFTPM_DISABLE_SANDBOX:-0}" == "1" ]]; then
@@ -35,6 +42,7 @@ mkdir -p "${app_dir}/Contents/MacOS" "${app_dir}/Contents/Resources/ThirdPartyNo
 cp "${binary}" "${app_dir}/Contents/MacOS/ControlLab"
 cp "${preview_binary}" "${app_dir}/Contents/MacOS/ControlLabRGBPreview"
 cp "${repo_dir}/Resources/Info.plist" "${app_dir}/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ${bundle_identifier}" "${app_dir}/Contents/Info.plist"
 cp "${repo_dir}/Resources/ControlLab.icns" "${app_dir}/Contents/Resources/ControlLab.icns"
 cp "${repo_dir}/Resources/ControlLab.png" "${app_dir}/Contents/Resources/ControlLab.png"
 cp "${repo_dir}/scripts/update.sh" "${repo_dir}/build/update.sh"
@@ -71,9 +79,14 @@ if [[ -n "${SIGNING_IDENTITY:-}" ]]; then
     signing_args=(--force --options runtime --timestamp --sign "${SIGNING_IDENTITY}")
     if [[ "${ENABLE_VIRTUAL_HID:-0}" == "1" ]]; then
         cp "${PROVISIONING_PROFILE}" "${app_dir}/Contents/embedded.provisionprofile"
-        signing_args+=(--entitlements "${repo_dir}/ControlLab.entitlements")
+        signing_args+=(--entitlements "${signing_entitlements}")
     fi
     codesign "${signing_args[@]}" "${app_dir}"
+    if [[ "${ENABLE_VIRTUAL_HID:-0}" == "1" ]]; then
+        codesign --display --extract-certificates "${repo_dir}/.build/signing/cert" "${app_dir}"
+        swift "${repo_dir}/scripts/prepare-native-signing.swift" \
+            "${signing_profile}" "${bundle_identifier}" "${signing_entitlements}" "${repo_dir}/.build/signing/cert0"
+    fi
 else
     codesign --force --sign - "${app_dir}/Contents/Frameworks/SDL3.framework"
     codesign --force --sign - "${app_dir}/Contents/MacOS/ControlLabRGBPreview"

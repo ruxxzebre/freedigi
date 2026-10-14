@@ -8,6 +8,11 @@ syntax checks; their Apple SDK build and hardware checks are still required.
 
 ## Build on the laptop
 
+For the Xcode app project and experimental native gamepad output, see
+[native gamepad signing and validation](native-gamepad.md). Open
+`ControlLab.xcodeproj` for app signing; Package.swift remains available for core
+development. The native scheme still requires Apple's approved capability.
+
 Install Xcode 16+ or Swift 6+ command-line tools, then run from the ControlLab
 repository root (the `macos` directory if copying the whole decompilation workspace):
 

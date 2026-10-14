@@ -435,7 +435,7 @@ if transport == .bluetooth {
     NSApplication.shared.finishLaunching()
 }
 let mode: Vader5BridgeMode = transport == .bluetooth || CommandLine.arguments.contains("--monitor")
-    ? .monitor : .virtualGamepad
+    ? .monitor : (CommandLine.arguments.contains("--xbox") ? .xboxGamepad : .virtualGamepad)
 let bridge = Vader5Bridge()
 bridge.onStatus = { print("Status: \($0)") }
 bridge.onLightingStatus = { print("Lighting: \($0)") }
@@ -449,7 +449,7 @@ signal(SIGINT) { _ in CFRunLoopStop(CFRunLoopGetMain()) }
 signal(SIGTERM) { _ in CFRunLoopStop(CFRunLoopGetMain()) }
 
 do {
-    try bridge.start(mode: mode, transport: transport)
+    try bridge.start(mode: mode, transport: transport, previewOutput: CommandLine.arguments.contains("--dry-run"))
     print("ControlLab bridge active over \(transport.rawValue) in \(mode.rawValue) mode. Press Control-C to stop.")
     CFRunLoopRun()
     bridge.stop()

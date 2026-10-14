@@ -49,7 +49,11 @@ final class BridgeViewModel: ObservableObject {
     @Published var deviceBusy = false
     @Published var monitoringPaused = false
     @Published var dryRun = true {
-        didSet { ControllerDiagnostics.shared.record("Execution mode", mode: executionMode, message: dryRun ? "Writes will be previewed; reads and monitoring remain live." : "Hardware writes enabled.") }
+        didSet {
+            guard oldValue != dryRun else { return }
+            ControllerDiagnostics.shared.record("Execution mode", mode: executionMode, message: dryRun ? "Writes and native gamepad output will be previewed; reads remain live." : "Hardware writes and native gamepad output enabled.")
+            if mode != .monitor && (isRunning || status == .connecting) { stop() }
+        }
     }
     @Published var operationMessage: String?
     var executionMode: ControllerExecutionMode { dryRun ? .dryRun : .live }
@@ -71,6 +75,7 @@ final class BridgeViewModel: ObservableObject {
         bridge.onStatus = { [weak self] status in
             DispatchQueue.main.async {
                 self?.status = status
+                if case .failed(let message) = status { self?.errorMessage = message }
                 ControllerDiagnostics.shared.record("Input bridge", message: String(describing: status))
             }
         }
@@ -105,7 +110,7 @@ final class BridgeViewModel: ObservableObject {
         case .stopped: monitoringPaused ? "Input monitoring paused" : "Disconnected"
         case .connecting: "Connecting…"
         case .running(.monitor): transport == .bluetooth ? "Bluetooth connected" : "Monitoring"
-        case .running(.virtualGamepad): "Gamepad active"
+        case .running(.virtualGamepad), .running(.xboxGamepad): dryRun ? "Output preview" : "Virtual HID started"
         case .failed: "Connection failed"
         }
     }
@@ -118,7 +123,7 @@ final class BridgeViewModel: ObservableObject {
         if isRunning {
             bridge.stop()
         } else {
-            do { try bridge.start(mode: mode, transport: transport) }
+            do { try bridge.start(mode: mode, transport: transport, previewOutput: dryRun) }
             catch { errorMessage = String(describing: error) }
         }
     }
@@ -144,7 +149,7 @@ final class BridgeViewModel: ObservableObject {
         status = .connecting
         ControllerDiagnostics.shared.record("Input bridge", stage: "resuming",
             message: "Settings access finished; restoring live input monitoring.")
-        do { try bridge.start(mode: mode, transport: transport) }
+        do { try bridge.start(mode: mode, transport: transport, previewOutput: dryRun) }
         catch {
             errorMessage = "Settings access finished, but input monitoring could not resume: \(error)"
         }

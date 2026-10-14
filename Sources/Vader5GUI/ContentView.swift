@@ -5,6 +5,7 @@ import Vader5Core
 private enum WorkspacePage: String, CaseIterable {
     case controller = "Controller"
     case configuration = "Configuration"
+    case compatibility = "Game compatibility"
     case lighting = "Lighting"
     case firmware = "Firmware"
     case diagnostics = "Diagnostics"
@@ -13,6 +14,7 @@ private enum WorkspacePage: String, CaseIterable {
         switch self {
         case .controller: "gamecontroller.fill"
         case .configuration: "slider.horizontal.3"
+        case .compatibility: "gamecontroller"
         case .lighting: "lightbulb.led.fill"
         case .firmware: "memorychip.fill"
         case .diagnostics: "list.bullet.rectangle"
@@ -23,6 +25,7 @@ private enum WorkspacePage: String, CaseIterable {
         switch self {
         case .controller: "Live input and motion data"
         case .configuration: "Back buttons, profiles and calibration"
+        case .compatibility: "Native output, signing and game-facing input"
         case .lighting: "RGB effects and device presets"
         case .firmware: "Versions, packages, and safe diagnostics"
         case .diagnostics: "Operations, device information and exportable logs"
@@ -50,7 +53,7 @@ struct ContentView: View {
                 topBar
                 Divider().overlay(CLTheme.border)
                 if model.dryRun {
-                    Text("Dry run: settings and firmware writes are previewed. Reads and input monitoring remain live.")
+                    Text("Dry run: settings, firmware writes and virtual gamepad output are previewed. Reads and input monitoring remain live.")
                         .font(.caption).foregroundStyle(.orange).padding(8)
                 }
                 if let message = model.operationMessage {
@@ -188,6 +191,7 @@ struct ContentView: View {
         switch page {
         case .controller: controllerPage
         case .configuration: DeviceProfilesView(model: model)
+        case .compatibility: GameCompatibilityView(model: model)
         case .lighting: lightingPage
         case .firmware:
             FirmwareInstallView(bridge: model).background(CLTheme.background)

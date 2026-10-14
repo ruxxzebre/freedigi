@@ -84,6 +84,12 @@ bypass that requirement on current macOS releases.
 Gyroscope, accelerometer, and rumble are not yet exposed through the virtual
 gamepad.
 
+**Game compatibility** provides experimental Xbox-compatible output alongside
+the generic HID profile, a dry run, report delivery counters, and a live Apple
+GameController input test. Signing and device creation do not guarantee game
+recognition. See [native output and Xcode signing](docs/native-gamepad.md) for
+the checked-in Xcode app project, required provisioning and Mac test steps.
+
 Bluetooth mode is monitor-only because macOS already exposes it as a standard
 gamepad. Vader-specific extra buttons, motion sensors, and firmware metadata are
 not present in its Bluetooth report; use the USB receiver for those features.
@@ -209,9 +215,18 @@ an approved build:
 
 ```sh
 ENABLE_VIRTUAL_HID=1 \
+APP_BUNDLE_IDENTIFIER="dev.yourname.controllab" \
 PROVISIONING_PROFILE="/path/to/approved.provisionprofile" \
 SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" make app
 ```
+
+To use Xcode's Signing & Capabilities UI, open `ControlLab.xcodeproj`. Select
+**ControlLab** for ordinary settings access, or **ControlLab Native Gamepad**
+after obtaining the approved entitlement/profile. Follow the
+[signing and validation guide](docs/native-gamepad.md).
+
+For a receiver-to-Xbox report preview without creating a virtual device:
+`swift run controllab-cli --xbox --dry-run`.
 
 ## Protocol layout
 
