@@ -145,7 +145,11 @@ struct DeviceProfilesView: View {
                 try load(value)
                 message = persist ? "Saved to controller and readback verified." : "Applied in RAM and readback verified. Not saved across restart."
             } catch {
-                self.error = "\(error) The device may have partial changes; read its profile again."
+                if let failure = error as? ControllerProfileFailure {
+                    self.error = failure.description
+                } else {
+                    self.error = "\(error) Read the active profile to check its current state before another write."
+                }
                 message = "Profile changes could not be confirmed. Monitoring remains paused."
                 ControllerDiagnostics.shared.record("Profile UI", stage: "failed", message: String(describing: error))
                 self.snapshot = nil

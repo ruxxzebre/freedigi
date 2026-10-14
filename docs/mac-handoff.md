@@ -144,3 +144,31 @@ profile; stage a mapping/restore and preview both temporary and saved writes;
 read/preview automatic calibration if advertised; preview lighting with Dry run
 on and confirm the LEDs do not change; inspect/export the session log. Physical
 writes remain separately unverified beyond the previously reported lighting.
+
+## Temporary mapping timeout follow-up
+
+On October 15 the user reported that Read active profile succeeds, Apply until
+restart times out, and a subsequent read shows the requested new mapping. This
+establishes that the mapping reached the controller; the old generic error does
+not identify whether its ACK or a later readback was lost. Other bytes and flash
+persistence were not established by that observation.
+
+The factory SDK fixture also exposed an unnecessary-write bug: Apply passed an
+unchanged profile name through the title encoder, replacing vendor 0xffff padding
+with zero bytes. The encoder now preserves the original bytes when the displayed
+name has not changed, so a single-button remap does not also write title segments.
+This is a confirmed packet-plan defect; it does not establish the exact cause of
+the controller's timeout without a hardware trace.
+
+Temporary Apply now performs one complete read-only recovery check after a
+timeout following a profile write. It reports success only if identity, slot and
+all requested bytes match. Partial changes, a different device/slot and failed
+recovery reads remain errors. No write is replayed, and Save operations do not use
+this recovery to guess flash persistence. Errors and Diagnostics now name the
+phase and command (identity 0x01, slot 0xA1, read 0xA3, start 0xA4, data 0xA5,
+save 0xA6), whether profile writes were attempted, and incomplete read counts.
+
+The sidebar distinguishes an intentional monitoring pause from Disconnected and
+offers Resume monitoring. A failed fresh profile read clears the previous
+editable snapshot. These changes still require a Mac build and hardware check;
+portable tests cover lost ACKs/readbacks and reject unsafe recovery outcomes.

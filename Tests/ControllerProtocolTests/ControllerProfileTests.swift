@@ -33,6 +33,16 @@ final class ControllerProfileTests: XCTestCase {
         XCTAssertEqual(snapshot.slot, 2)
     }
 
+    func testUnchangedTitlePreservesFactoryPaddingAndOnlyMapsRequestedButton() throws {
+        let original = try ControllerProfile(bytes: fixture())
+        var edited = original
+        try edited.setTitle(edited.title) // The GUI supplies its unchanged name on Apply.
+        XCTAssertEqual(edited, original, "An unchanged title must preserve the vendor's 0xffff padding.")
+        try edited.map(18, to: 4)
+        let reports = try edited.writeReports(replacing: original, slot: 2, persist: false)
+        XCTAssertEqual(reports.map { $0[2] }, [0xa4, 0xa5])
+    }
+
     func testWriteVerifyPersistAndReadBack() throws {
         let channel = try SimulatedController(bytes: fixture())
         let client = ControllerProfileClient(channel: channel)
@@ -87,6 +97,59 @@ final class ControllerProfileTests: XCTestCase {
         XCTAssertEqual(channel.commands, [1])
     }
 
+    func testTimeoutIdentifiesPhaseCommandAndWriteExposure() throws {
+        for scenario in 0..<4 {
+            let channel = try SimulatedController(bytes: fixture())
+            let client = ControllerProfileClient(channel: channel)
+            let before = try client.readActive()
+            var edited = try before.profile()
+            try edited.map(18, to: 4)
+            channel.suppressIdentity = scenario == 0
+            channel.loseStartACK = scenario == 1
+            channel.loseWriteACK = scenario == 2
+            channel.suppressReadback = scenario == 3
+            XCTAssertThrowsError(try client.apply(edited, replacing: before, persist: true)) { error in
+                let text = String(describing: error)
+                let command = ["0x01", "0xA4", "0xA5", "0xA3"][scenario]
+                XCTAssertTrue(text.contains(command), text)
+                XCTAssertTrue(text.contains(scenario == 0 ? "No profile-write commands" : "Profile-write commands were sent"), text)
+            }
+            XCTAssertFalse(channel.mutations.contains(0xa6))
+            if scenario == 0 { XCTAssertTrue(channel.mutations.isEmpty) }
+        }
+    }
+
+    func testTemporaryApplyRecoversLostAckByReadingBackWithoutRewriting() throws {
+        for lostACK in [true, false] {
+            let channel = try SimulatedController(bytes: fixture())
+            let client = ControllerProfileClient(channel: channel)
+            let before = try client.readActive()
+            var edited = try before.profile()
+            try edited.map(18, to: 4)
+            channel.loseWriteACK = lostACK
+            channel.readbacksToDrop = lostACK ? 0 : 1
+            let after = try client.apply(edited, replacing: before, persist: false)
+            XCTAssertEqual(try after.profile(), edited)
+            XCTAssertEqual(channel.mutations, [0xa4, 0xa5])
+        }
+    }
+
+    func testTemporaryRecoveryRejectsPartialWritesAndDifferentDeviceOrSlot() throws {
+        for scenario in 0..<3 {
+            let channel = try SimulatedController(bytes: fixture())
+            let client = ControllerProfileClient(channel: channel)
+            let before = try client.readActive()
+            var edited = try before.profile()
+            try edited.map(18, to: 4)
+            if scenario == 0 { try edited.setTitle("Two edits") }
+            if scenario == 1 { channel.deviceAfterWrite = 144 }
+            if scenario == 2 { channel.slotAfterWrite = 1 }
+            channel.loseWriteACK = true
+            XCTAssertThrowsError(try client.apply(edited, replacing: before, persist: false))
+            XCTAssertEqual(channel.mutations, [0xa4, 0xa5])
+        }
+    }
+
     func testCommandMatchesRecoveredWireBytes() {
         XCTAssertEqual(Array(ControllerCommand.frame(0xa3, payload: [2, 20]).prefix(7)),
                        [0x5a, 0xa5, 0xa3, 4, 2, 20, 0xbd])
@@ -101,7 +164,11 @@ private final class SimulatedController: ControllerChannel {
     var segmentStarts: [UInt8] = []
     var reorder = false, missing = false, conflicting = false
     var loseWriteACK = false, discardWrites = false
+    var suppressIdentity = false, loseStartACK = false, suppressReadback = false
+    var readbacksToDrop = 0
     var deviceID: UInt8 = 130
+    var slot: UInt8 = 2
+    var deviceAfterWrite: UInt8?, slotAfterWrite: UInt8?
     private var segment = 0
     init(bytes: [UInt8]) { self.bytes = bytes }
     func send(_ report: [UInt8]) throws {
@@ -109,14 +176,17 @@ private final class SimulatedController: ControllerChannel {
         commands.append(command)
         switch command {
         case 1:
+            if suppressIdentity { return }
             var result = [UInt8](repeating: 0, count: 32)
             result.replaceSubrange(0..<11, with: [0x5a, 0xa5, 1, 1, 0, deviceID, 2, 1, 2, 3, 4])
             queue.append(result)
         case 0xa1:
             var result = [UInt8](repeating: 0, count: 32)
-            result.replaceSubrange(0..<6, with: [0x5a, 0xa5, 0xa1, 12, 0, 2])
+            result.replaceSubrange(0..<6, with: [0x5a, 0xa5, 0xa1, 12, 0, slot])
             queue.append(result)
         case 0xa3:
+            if suppressReadback && !mutations.isEmpty { return }
+            if readbacksToDrop > 0 && !mutations.isEmpty { readbacksToDrop -= 1; return }
             var packets: [[UInt8]] = []
             for offset in stride(from: 0, to: bytes.count, by: 20) {
                 var packet: [UInt8] = [0x5a, 0xa5, 0xa3, UInt8(bytes.count / 20), UInt8(offset / 20), report[4]]
@@ -136,11 +206,13 @@ private final class SimulatedController: ControllerChannel {
             mutations.append(command)
             segment = Int(report[5])
             segmentStarts.append(report[5])
-            queue.append(ControllerCommand.frame(command))
+            if !loseStartACK { queue.append(ControllerCommand.frame(command)) }
         case 0xa5:
             mutations.append(command)
             XCTAssertEqual(report[4], 0)
             if !discardWrites { bytes.replaceSubrange((segment * 20)..<(segment * 20 + 20), with: report[5..<25]) }
+            if let deviceAfterWrite { deviceID = deviceAfterWrite }
+            if let slotAfterWrite { slot = slotAfterWrite }
             if !loseWriteACK { queue.append(ControllerCommand.frame(command)) }
         case 0xa6:
             mutations.append(command)

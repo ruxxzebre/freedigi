@@ -81,6 +81,9 @@ public struct ControllerProfile: Equatable, Sendable {
         guard units.count <= 10, !units.contains(0), !units.contains(0xffff) else {
             throw ControllerProtocolError.invalid("Profile names allow up to 10 UTF-16 characters.")
         }
+        // Vendor profiles may pad names with 0xffff instead of zero. Applying
+        // an unrelated setting must not rewrite that untouched field.
+        guard title != self.title else { return }
         var data = units.flatMap { [UInt8(truncatingIfNeeded: $0), UInt8($0 >> 8)] }
         data += [UInt8](repeating: 0, count: 20 - data.count)
         bytes.replaceSubrange(770..<790, with: data)
@@ -159,23 +162,52 @@ public struct ControllerProfileSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+/// Includes the failed phase and distinguishes read-only timeouts from writes
+/// with an uncertain outcome.
+public struct ControllerProfileFailure: Error, CustomStringConvertible, Sendable {
+    public let phase: String
+    public let command: UInt8
+    public let writesAttempted: Bool
+
+    public var description: String {
+        let exposure = writesAttempted
+            ? "Profile-write commands were sent; their result is not confirmed. Read the active profile before another write."
+            : "No profile-write commands have been sent by this operation."
+        return "Controller response timed out during \(phase) (command \(String(format: "0x%02X", command))). \(exposure)"
+    }
+}
+
 /// The A3 protocol has no request token. A session must have exclusive ownership
 /// and may not automatically retry timed-out writes (late ACKs are ambiguous).
 public final class ControllerProfileClient {
     private let channel: any ControllerChannel
+    private var phase = "reading active profile"
+    private var writesAttempted = false
     public init(channel: any ControllerChannel) { self.channel = channel }
 
     private func response(_ command: UInt8, timeout: TimeInterval = 2) throws -> [UInt8] {
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
-        while true {
-            let remaining = deadline - ProcessInfo.processInfo.systemUptime
-            guard remaining > 0 else { throw ControllerProtocolError.timeout }
-            let report = try channel.receive(timeout: remaining)
-            if ControllerCommand.matches(report, command) { return report }
+        do {
+            while true {
+                let remaining = deadline - ProcessInfo.processInfo.systemUptime
+                guard remaining > 0 else { throw ControllerProtocolError.timeout }
+                let report = try channel.receive(timeout: remaining)
+                if ControllerCommand.matches(report, command) { return report }
+            }
+        } catch ControllerProtocolError.timeout {
+            let failure = ControllerProfileFailure(phase: phase, command: command, writesAttempted: writesAttempted)
+            ControllerDiagnostics.shared.record("Profile command", stage: "failed", message: failure.description)
+            throw failure
         }
     }
 
+    private func traceRequest(_ command: UInt8, details: String = "") {
+        ControllerDiagnostics.shared.record("Profile command", stage: "request",
+            message: "\(phase): \(String(format: "0x%02X", command)) \(details)")
+    }
+
     public func identity() throws -> ControllerIdentity {
+        traceRequest(1, details: "controller identity")
         try channel.send(ControllerCommand.frame(1))
         guard let identity = ControllerIdentity.parse(try response(1)) else {
             throw ControllerProtocolError.invalid("Malformed controller identity response.")
@@ -185,6 +217,7 @@ public final class ControllerProfileClient {
     }
 
     private func activeSlot() throws -> UInt8 {
+        traceRequest(0xa1, details: "active PC profile")
         try channel.send(ControllerCommand.frame(0xa1))
         let report = try response(0xa1)
         guard report.count >= 14, report[5] < 4 else {
@@ -194,14 +227,21 @@ public final class ControllerProfileClient {
     }
 
     private func read(slot: UInt8) throws -> ControllerProfile {
+        traceRequest(0xa3, details: "read profile \(slot + 1)")
         try channel.send(ControllerCommand.frame(0xa3, payload: [slot, 20]))
         var packets: [Int: [UInt8]] = [:]
         var count: Int?
         let deadline = ProcessInfo.processInfo.systemUptime + 5
         repeat {
             let remaining = deadline - ProcessInfo.processInfo.systemUptime
-            guard remaining > 0 else { throw ControllerProtocolError.timeout }
-            let report = try response(0xa3, timeout: remaining)
+            let report: [UInt8]
+            do {
+                report = try response(0xa3, timeout: max(0, remaining))
+            } catch {
+                ControllerDiagnostics.shared.record("Profile packets", stage: "incomplete",
+                    message: "Received \(packets.count) / \(count.map(String.init) ?? "unknown") profile packets.")
+                throw error
+            }
             guard report.count >= 26, report[5] == slot, report[3] >= 42,
                   report[4] < report[3] else {
                 throw ControllerProtocolError.invalid("Malformed profile packet.")
@@ -215,6 +255,7 @@ public final class ControllerProfileClient {
             count = total
             packets[index] = payload
         } while packets.count != count
+        ControllerDiagnostics.shared.record("Profile packets", stage: "received", message: "Received all \(packets.count) profile packets.")
         return try ControllerProfile(bytes: (0..<count!).flatMap { packets[$0]! })
     }
 
@@ -232,24 +273,63 @@ public final class ControllerProfileClient {
     /// Saving is explicit; applying alone changes the active configuration in RAM.
     public func apply(_ edited: ControllerProfile, replacing snapshot: ControllerProfileSnapshot,
                       persist: Bool) throws -> ControllerProfileSnapshot {
+        writesAttempted = false
+        phase = "checking the current profile before writing"
+        do {
+            return try applyAndVerify(edited, replacing: snapshot, persist: persist)
+        } catch let failure as ControllerProfileFailure {
+            // A temporary apply may have reached the device despite a lost ACK
+            // or transient readback timeout. Resolve that ambiguity with one
+            // complete read; never replay writes or turn this into a flash save.
+            guard !persist, writesAttempted else { throw failure }
+            phase = "read-only recovery after an apply timeout"
+            ControllerDiagnostics.shared.record("Profile recovery", stage: "started",
+                message: "\(failure.description) Checking exact readback once; no writes will be repeated.")
+            do {
+                let recovered = try readActive()
+                if recovered.identity == snapshot.identity, recovered.slot == snapshot.slot,
+                   try recovered.profile() == edited {
+                    ControllerDiagnostics.shared.record("Profile recovery", stage: "verified",
+                        message: "Complete requested profile verified on the same controller and slot. Temporary apply succeeded; nothing saved to flash.")
+                    return recovered
+                }
+                ControllerDiagnostics.shared.record("Profile recovery", stage: "unverified",
+                    message: "Readback differs from the complete requested profile or the device/slot changed. No writes repeated.")
+            } catch {
+                ControllerDiagnostics.shared.record("Profile recovery", stage: "failed", message: String(describing: error))
+            }
+            throw failure
+        }
+    }
+
+    private func applyAndVerify(_ edited: ControllerProfile, replacing snapshot: ControllerProfileSnapshot,
+                                persist: Bool) throws -> ControllerProfileSnapshot {
         let original = try snapshot.profile()
         let reports = try edited.writeReports(replacing: original, slot: snapshot.slot, persist: persist)
         guard try readActive() == snapshot else { throw ControllerProtocolError.conflict }
         for report in reports where report[2] != 0xa6 {
+            phase = report[2] == 0xa4 ? "starting profile segment \(report[5])" : "writing profile data"
+            traceRequest(report[2])
+            writesAttempted = true
             try channel.send(report)
             _ = try response(report[2])
         }
+        phase = "verifying the temporary profile"
         guard try read(slot: snapshot.slot) == edited else { throw ControllerProtocolError.verification }
         guard try activeSlot() == snapshot.slot, try identity() == snapshot.identity else {
             throw ControllerProtocolError.conflict
         }
         var expected = edited
         if persist {
+            phase = "saving profile to controller flash"
             let version = original.dataVersion &+ 1
+            traceRequest(0xa6)
+            writesAttempted = true
             try channel.send(reports.last!)
             _ = try response(0xa6, timeout: 12)
             expected.setDataVersion(version)
         }
+        phase = "final profile readback"
         let result = try readActive()
         guard result.identity == snapshot.identity, result.slot == snapshot.slot,
               try result.profile() == expected else { throw ControllerProtocolError.verification }
