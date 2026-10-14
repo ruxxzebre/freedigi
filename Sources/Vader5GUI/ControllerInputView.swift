@@ -68,8 +68,8 @@ private final class ControllerOverlayLayout: ObservableObject {
         .menu: CGPoint(x: 332.00390625, y: 117.2578125),
         .home: CGPoint(x: 298.453125, y: 89.6484375),
         .function: CGPoint(x: 296.92578125, y: 264.23046875),
-        .m2: CGPoint(x: 225, y: 290), .m1: CGPoint(x: 375, y: 290),
-        .m4: CGPoint(x: 170, y: 322), .m3: CGPoint(x: 430, y: 322),
+        .m4: CGPoint(x: 225, y: 290), .m3: CGPoint(x: 375, y: 290),
+        .m2: CGPoint(x: 170, y: 322), .m1: CGPoint(x: 430, y: 322),
     ]
 
     init() {

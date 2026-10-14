@@ -112,22 +112,59 @@ snapshots of raw wire bytes, not the vendor's protobuf `.dat` export format.
 ### Press to map and profile read retries
 
 After reading a profile, start input monitoring if needed, then select **Start
-press to map**. Press one source button, release everything, press its target,
-and release again. Repeat for the next mapping. This only stages changes; Apply
+mapping** or press **LB + RB together**. Release both bumpers, press one source
+button, release everything, press its target, and release again. Repeat for the
+next mapping without restarting capture. The card shows the capture count and
+last pair. This only stages changes; Apply
 or Save remains explicit, including in dry-run mode. Pressed rows light up and
-the selected source is outlined. Stop capture or Escape exits the gesture.
+the selected source is outlined. **Stop mapping**, Escape, or **LB + RB together**
+exits the gesture. Each single-button selection commits on release so the
+shortcut's first bumper cannot accidentally become a source or target. The
+shortcut fires once and waits for complete release before it can fire again;
+individual LB and RB remain assignable.
 Settings access, disconnection, leaving Configuration, manual menu edits and
 Discard edits also stop capture.
 
 Capture uses enhanced USB receiver button reports, including separate M1–M4
 bits. Button transitions bypass the 60 Hz visual coalescer and arrive in order.
-D-pad diagonals and simultaneous button presses are rejected as ambiguous;
+D-pad diagonals and simultaneous button presses other than the shortcut are rejected as ambiguous;
 Home/Fn/LM/RM cannot be mapped by this editor. Triggers engage at 160/255 and
 release below 80/255 to prevent noise. If a rear button reports only its assigned
 button or multiple buttons, explicitly choose M1–M4 in the fallback disclosure
 before pressing the target. Bluetooth capture is disabled because its reports
 may expose assigned outputs rather than physical buttons. Actual rear-button
 report behavior still requires verification on the user's firmware/dongle.
+
+M3/M4 appear above M1/M2 in the back-button grid and default input overlay.
+User-positioned overlays remain where the user placed them; **Edit layout →
+Reset** restores the corrected defaults. C/Z have their own visible mapping
+card. They are extra physical face buttons; the loaded profile determines their
+current assignments. Mapping them to standard outputs such as A/B can help
+games that do not expose the extra buttons separately.
+
+### Editor coverage compared with Flydigi
+
+The recovered Space Station 4.2.0.9 English UI strings and SDK configuration
+types expose the following editor features. This is a comparison with the
+recovered app, not a claim that every shared UI feature applies to every model
+or that it exhaustively describes the latest web release.
+
+| Feature | ControlLab hardware editor |
+| --- | --- |
+| Simple gamepad mappings, including M1–M4 and C/Z | Implemented, with staging, backup and readback |
+| Turbo, macros, keyboard/mouse outputs | Not implemented; existing custom mappings are preserved until explicitly replaced |
+| Stick curves, dead zones, axis sensitivity and circularity | Advanced UI drafts only; not written to the controller |
+| Trigger travel ranges and detailed vibration settings | Advanced UI drafts only; basic grip-vibration enable is implemented |
+| Gyro output mapping, sensitivity and activation rules | Advanced UI drafts only; not written to the controller |
+| Hardware profile selection and quick switching | Active PC profile only; the four-profile advanced UI is local drafts |
+| Global stick debounce and polling-rate controls | Not implemented as hardware edits |
+
+Reference evidence: `research/4.2.0.9/ui/.vite/renderer/main_window/locales/en/translation.json`
+and `research/decompiled/Flydigi.ControllerSdk/` in the parent research workspace.
+Separately, guided manual calibration is still missing, and firmware transfer
+and recovery need hardware validation. Save persistence and which profile is
+used over iPhone Bluetooth must be tested; saving a PC profile does not prove
+it is used in another connection mode.
 
 Explicit profile reads make at most **five total attempts** for timeouts and
 HID open/I/O failures, reopening the session with a 200 ms delay between attempts.

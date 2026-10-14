@@ -23,12 +23,14 @@ public struct ControllerMappingInput: Sendable {
     }
 }
 
-/// A local-only editor gesture. Requires neutral input between each press and
-/// continues with the next source after emitting one assignment.
+/// A local-only editor gesture. Commits each press on release so an overlapping
+/// LB + RB shortcut never records its first bumper as a source or destination.
+/// Continues with the next source after emitting one assignment.
 public struct ControllerMappingCapture: Equatable, Sendable {
     public enum Phase: Equatable, Sendable {
         case idle, releaseForSource, source
         case releaseForTarget(Int), target(Int)
+        case holdingSource(Int), holdingTarget(source: Int, destination: Int)
     }
     public struct Assignment: Equatable, Sendable {
         public let source: Int
@@ -36,17 +38,20 @@ public struct ControllerMappingCapture: Equatable, Sendable {
     }
     public private(set) var phase: Phase = .idle
     public private(set) var issue: String?
+    private var shortcutLatched = false
     public init() {}
     public var isActive: Bool { phase != .idle }
     public var selectedSource: Int? {
         switch phase {
-        case .releaseForTarget(let source), .target(let source): source
+        case .holdingSource(let source), .releaseForTarget(let source), .target(let source),
+             .holdingTarget(let source, _): source
         default: nil
         }
     }
 
     public mutating func start(held: Set<Int>, source: Int? = nil) {
         issue = nil
+        shortcutLatched = !held.isEmpty
         if let source {
             guard (0..<22).contains(source) else { cancel(); return }
             phase = held.isEmpty ? .target(source) : .releaseForTarget(source)
@@ -58,12 +63,35 @@ public struct ControllerMappingCapture: Equatable, Sendable {
     public mutating func cancel() { phase = .idle; issue = nil }
 
     public mutating func receive(_ held: Set<Int>) -> Assignment? {
+        if shortcutLatched {
+            guard held.isEmpty else { return nil }
+            shortcutLatched = false
+        } else if held == [10, 11] {
+            if isActive { cancel() } else { start(held: held) }
+            shortcutLatched = true
+            return nil
+        }
         switch phase {
         case .idle: return nil
         case .releaseForSource:
             if held.isEmpty { phase = .source; issue = nil }
         case .releaseForTarget(let source):
             if held.isEmpty { phase = .target(source); issue = nil }
+        case .holdingSource(let button):
+            if held.isEmpty { phase = .target(button) }
+            else if held != [button] {
+                issue = "More than one button detected. Release everything and try one button."
+                phase = .releaseForSource
+            }
+        case .holdingTarget(let source, let destination):
+            if held.isEmpty {
+                phase = .source
+                issue = nil
+                return Assignment(source: source, destination: destination)
+            } else if held != [destination] {
+                issue = "More than one button detected. Release everything and try one button."
+                phase = .releaseForTarget(source)
+            }
         case .source, .target:
             guard !held.isEmpty else { return nil }
             let source = selectedSource
@@ -73,11 +101,10 @@ public struct ControllerMappingCapture: Equatable, Sendable {
                 return nil
             }
             if let source {
-                phase = .releaseForSource
-                issue = nil
-                return Assignment(source: source, destination: button)
+                phase = .holdingTarget(source: source, destination: button)
+            } else {
+                phase = .holdingSource(button)
             }
-            phase = .releaseForTarget(button)
             issue = nil
         }
         return nil

@@ -11,6 +11,8 @@ struct DeviceProfilesView: View {
     @State private var vibration = true
     @State private var confirmRead = false
     @State private var capture = ControllerMappingCapture()
+    @State private var capturedCount = 0
+    @State private var lastCaptured: String?
     @State private var message = "Read the active PC profile from your connected controller."
     @State private var error: String?
     @State private var backupURL: URL?
@@ -38,7 +40,14 @@ struct DeviceProfilesView: View {
                     inputCaptureCard
                     ConfigurationCard(title: "Back buttons", subtitle: "Choose what M1–M4 should do. Selections are staged until you apply or save.", icon: "gamecontroller.fill") {
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            ForEach(18..<22, id: \.self) { source in
+                            ForEach([20, 21, 18, 19], id: \.self) { source in
+                                mappingRow(source, profile: edited)
+                            }
+                        }
+                    }
+                    ConfigurationCard(title: "C and Z buttons", subtitle: "Extra face buttons beside ABXY. Choose a standard button such as A or B for games that do not expose C/Z separately.", icon: "button.programmable") {
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                            ForEach(16..<18, id: \.self) { source in
                                 mappingRow(source, profile: edited)
                             }
                         }
@@ -46,7 +55,7 @@ struct DeviceProfilesView: View {
                     ConfigurationCard(title: "Other buttons", subtitle: "Remap face buttons, bumpers, triggers and stick clicks.", icon: "arrow.triangle.swap") {
                         DisclosureGroup("Show all button mappings") {
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                                ForEach(0..<18, id: \.self) { source in
+                                ForEach(0..<16, id: \.self) { source in
                                     mappingRow(source, profile: edited)
                                 }
                             }
@@ -84,8 +93,16 @@ struct DeviceProfilesView: View {
                   model.transport == .usbReceiver else { cancelCapture(); return }
             let previousIssue = capture.issue
             let previousSource = capture.selectedSource
+            let wasActive = capture.isActive
             if let assignment = capture.receive(held) {
                 stageMapping(assignment.source, to: assignment.destination)
+                capturedCount += 1
+                lastCaptured = "\(buttonName(assignment.source)) → \(buttonName(assignment.destination))"
+            }
+            if capture.isActive != wasActive {
+                if capture.isActive { capturedCount = 0; lastCaptured = nil }
+                ControllerDiagnostics.shared.record("Press to map", stage: capture.isActive ? "started" : "stopped",
+                    message: "LB + RB shortcut. \(capture.isActive ? "Release both bumpers, then choose a source." : "Staged edits remain local.")")
             }
             if let issue = capture.issue, issue != previousIssue {
                 ControllerDiagnostics.shared.record("Press to map", stage: "input rejected", message: issue)
@@ -169,16 +186,18 @@ struct DeviceProfilesView: View {
 
     private var capturePrompt: String {
         switch capture.phase {
-        case .idle: "Press a button to see it light up. Start capture to build mappings with the controller."
+        case .idle: "Click Start mapping or press LB + RB together to start."
         case .releaseForSource: "Release all buttons. Then press the next button you want to change."
         case .source: "1 · Press the button you want to change."
+        case .holdingSource(let source): "Release \(buttonName(source)), then press its target."
         case .releaseForTarget(let source): "Release all buttons. Next, press the target for \(buttonName(source))."
         case .target(let source): "2 · Press the button you want \(buttonName(source)) to act as."
+        case .holdingTarget(let source, let destination): "Release \(buttonName(destination)) to record \(buttonName(source)) → \(buttonName(destination))."
         }
     }
 
     private var inputCaptureCard: some View {
-        ConfigurationCard(title: "Press to map", subtitle: "Press a source, release it, then press its target. Repeat for each button.", icon: "hand.tap") {
+        ConfigurationCard(title: "Press to map", subtitle: "Press and release a source, then press and release its target. Keep going to map more buttons.", icon: "hand.tap") {
             HStack(spacing: 12) {
                 Image(systemName: model.isRunning ? "dot.radiowaves.left.and.right" : "pause.circle")
                     .foregroundStyle(model.isRunning ? Color.green : Color.secondary)
@@ -188,17 +207,24 @@ struct DeviceProfilesView: View {
                     .font(.callout.weight(.semibold))
                 Spacer()
                 if capture.isActive {
-                    Button("Stop capture") { cancelCapture() }.keyboardShortcut(.cancelAction)
-                } else if !model.isRunning {
-                    Button("Start input monitoring") { model.toggle() }
+                    Button("Stop mapping") { cancelCapture() }.keyboardShortcut(.cancelAction)
                 } else {
-                    Button("Start press to map") { startCapture() }
+                    if !model.isRunning {
+                        Button("Start input monitoring") { model.toggle() }
+                    }
+                    Button("Start mapping") { startCapture() }
                         .buttonStyle(.borderedProminent)
-                        .disabled(model.transport != .usbReceiver)
+                        .disabled(!model.isRunning || model.transport != .usbReceiver)
                 }
             }
             .controlSize(.large).disabled(model.operationInProgress)
             Text(capturePrompt).font(.callout).foregroundStyle(capture.isActive ? Color.primary : Color.secondary)
+            Text("LB + RB together starts or stops mapping. Release both before continuing. A single bumper is still assignable.")
+                .font(.caption).foregroundStyle(.secondary)
+            if let lastCaptured {
+                Label("\(capturedCount) captured · Last: \(lastCaptured)", systemImage: "checkmark.circle.fill")
+                    .font(.callout).foregroundStyle(.green)
+            }
             if let issue = capture.issue {
                 Text(issue).font(.callout).foregroundStyle(.orange)
             }
@@ -224,6 +250,8 @@ struct DeviceProfilesView: View {
     private func startCapture(source: Int? = nil) {
         guard snapshot != nil, model.isRunning, !model.operationInProgress, model.transport == .usbReceiver else { return }
         capture.start(held: model.pressedProfileButtons, source: source)
+        capturedCount = 0
+        lastCaptured = nil
         ControllerDiagnostics.shared.record("Press to map", stage: "started", message: source.map { "Source selected: \(buttonName($0))." } ?? "Waiting for a source button.")
     }
 

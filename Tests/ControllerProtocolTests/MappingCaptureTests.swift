@@ -2,6 +2,34 @@ import XCTest
 @testable import ControllerProtocol
 
 final class MappingCaptureTests: XCTestCase {
+    func testBothBumpersToggleCaptureOnceUntilFullyReleased() {
+        var capture = ControllerMappingCapture()
+        XCTAssertNil(capture.receive([10]))
+        XCTAssertNil(capture.receive([10, 11]))
+        XCTAssertTrue(capture.isActive)
+        XCTAssertNil(capture.receive([10, 11]))
+        XCTAssertNil(capture.receive([11]))
+        XCTAssertNil(capture.receive([10, 11]))
+        XCTAssertTrue(capture.isActive)
+        XCTAssertNil(capture.receive([]))
+        XCTAssertNil(capture.receive([11]))
+        XCTAssertNil(capture.receive([10, 11]))
+        XCTAssertFalse(capture.isActive)
+        XCTAssertNil(capture.receive([10]))
+        XCTAssertNil(capture.receive([]))
+        XCTAssertFalse(capture.isActive)
+    }
+
+    func testStopChordDoesNotStageItsFirstBumperAsTarget() {
+        var capture = ControllerMappingCapture()
+        capture.start(held: [], source: 18)
+        XCTAssertNil(capture.receive([10]))
+        XCTAssertNil(capture.receive([10, 11]))
+        XCTAssertNil(capture.receive([11]))
+        XCTAssertNil(capture.receive([]))
+        XCTAssertFalse(capture.isActive)
+    }
+
     func testRepeatedPairsRequireReleaseAndEmitOnce() {
         var capture = ControllerMappingCapture()
         capture.start(held: [18])
@@ -9,18 +37,19 @@ final class MappingCaptureTests: XCTestCase {
         XCTAssertEqual(capture.phase, .releaseForSource)
         XCTAssertNil(capture.receive([]))
         XCTAssertNil(capture.receive([18]))
-        XCTAssertEqual(capture.phase, .releaseForTarget(18))
-        XCTAssertNil(capture.receive([18, 4]))
-        XCTAssertNil(capture.receive([4]))
+        XCTAssertEqual(capture.phase, .holdingSource(18))
+        XCTAssertNil(capture.receive([18]))
         XCTAssertNil(capture.receive([]))
-        let first = capture.receive([4])
+        XCTAssertNil(capture.receive([4]))
+        XCTAssertNil(capture.receive([4]))
+        let first = capture.receive([])
         XCTAssertEqual(first?.source, 18)
         XCTAssertEqual(first?.destination, 4)
-        XCTAssertNil(capture.receive([4]))
         XCTAssertNil(capture.receive([]))
         XCTAssertNil(capture.receive([19]))
         XCTAssertNil(capture.receive([]))
-        XCTAssertEqual(capture.receive([5])?.source, 19)
+        XCTAssertNil(capture.receive([5]))
+        XCTAssertEqual(capture.receive([])?.source, 19)
     }
 
     func testChordsAndUnsupportedButtonsNeverGuess() {
@@ -39,7 +68,8 @@ final class MappingCaptureTests: XCTestCase {
         XCTAssertEqual(capture.phase, .releaseForTarget(18))
         XCTAssertNil(capture.receive([4]))
         XCTAssertNil(capture.receive([]))
-        XCTAssertEqual(capture.receive([7])?.destination, 7)
+        XCTAssertNil(capture.receive([7]))
+        XCTAssertEqual(capture.receive([])?.destination, 7)
     }
 
     func testManualSourceCancelAndSelfMapping() {
@@ -47,7 +77,8 @@ final class MappingCaptureTests: XCTestCase {
         capture.start(held: [4], source: 21)
         XCTAssertNil(capture.receive([4]))
         XCTAssertNil(capture.receive([]))
-        XCTAssertEqual(capture.receive([21])?.destination, 21)
+        XCTAssertNil(capture.receive([21]))
+        XCTAssertEqual(capture.receive([])?.destination, 21)
         capture.cancel()
         XCTAssertNil(capture.receive([]))
         XCTAssertNil(capture.receive([18]))
@@ -74,10 +105,56 @@ final class MappingCaptureTests: XCTestCase {
             XCTAssertNil(capture.receive([]))
             XCTAssertNil(capture.receive([source]))
             XCTAssertNil(capture.receive([]))
-            let assignment = capture.receive([4])
+            XCTAssertNil(capture.receive([4]))
+            let assignment = capture.receive([])
             XCTAssertEqual(assignment?.source, source)
             XCTAssertEqual(assignment?.destination, 4)
         }
+    }
+
+    func testIndividualBumpersRemainMappableInBothRoles() {
+        for bumper in [10, 11] {
+            var capture = ControllerMappingCapture()
+            capture.start(held: [])
+            XCTAssertNil(capture.receive([bumper]))
+            XCTAssertNil(capture.receive([]))
+            XCTAssertNil(capture.receive([4]))
+            XCTAssertEqual(capture.receive([])?.source, bumper)
+            XCTAssertNil(capture.receive([18]))
+            XCTAssertNil(capture.receive([]))
+            XCTAssertNil(capture.receive([bumper]))
+            XCTAssertEqual(capture.receive([])?.destination, bumper)
+            XCTAssertTrue(capture.isActive)
+        }
+    }
+
+    func testStaggeredUnsupportedChordCannotStageFirstButton() {
+        var capture = ControllerMappingCapture()
+        capture.start(held: [], source: 20)
+        XCTAssertNil(capture.receive([4]))
+        XCTAssertNil(capture.receive([4, 5]))
+        XCTAssertNotNil(capture.issue)
+        XCTAssertNil(capture.receive([5]))
+        XCTAssertNil(capture.receive([]))
+        XCTAssertEqual(capture.selectedSource, 20)
+        XCTAssertNil(capture.receive([7]))
+        XCTAssertEqual(capture.receive([])?.destination, 7)
+    }
+
+    func testShortcutWhileSelectingSourceAndRestartAfterCancel() {
+        var capture = ControllerMappingCapture()
+        capture.start(held: [])
+        XCTAssertNil(capture.receive([11]))
+        XCTAssertNil(capture.receive([11, 10]))
+        XCTAssertFalse(capture.isActive)
+        XCTAssertNil(capture.receive([]))
+        XCTAssertNil(capture.receive([10, 11]))
+        XCTAssertTrue(capture.isActive)
+        XCTAssertNil(capture.receive([]))
+        capture.cancel()
+        XCTAssertNil(capture.receive([18]))
+        XCTAssertNil(capture.receive([]))
+        XCTAssertFalse(capture.isActive)
     }
 
     func testTriggerNoiseAndFastPressRelease() {
