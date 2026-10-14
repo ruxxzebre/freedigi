@@ -46,6 +46,28 @@ only needed after changing target file membership:
 `python3 scripts/generate-xcode-project.py` (this resets project-level signing
 edits; preserve them first).
 
+### Repair the initial Xcode project's architecture settings
+
+The initial `e500752` project omitted `ONLY_ACTIVE_ARCH` for development builds.
+This permits app/helper builds for a different architecture from the local
+package, producing a dependency-scanner error such as `Vader5Core.swiftmodule`
+“built for incompatible target” in `DockLightingPreview.swift`. Debug and
+NativeGamepad now use the active Mac architecture at both project and target
+levels. Release retains all standard architectures.
+
+To repair an existing copy without replacing personal signing settings, quit
+Xcode and run the updated script against that copy:
+
+```sh
+python3 scripts/fix-xcode-architectures.py /path/to/ControlLab.xcodeproj
+```
+
+The script backs up the project, changes only the six development architecture
+settings, and validates the complete result before replacing it. Reopen Xcode,
+choose **Product → Clean Build Folder** once, and build again. The repair and
+project settings have structural checks; the actual Mac rebuild is still the
+confirmation of the reported failure.
+
 ## Scripted signing
 
 With a matching approved profile and certificate already installed:

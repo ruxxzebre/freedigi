@@ -38,7 +38,11 @@ def configs(name, base, native=None):
     for config in ("Debug", "Release", "NativeGamepad"):
         settings = dict(base)
         settings.update(SWIFT_OPTIMIZATION_LEVEL="-O" if config == "Release" else "-Onone",
-                        DEBUG_INFORMATION_FORMAT="dwarf-with-dsym" if config == "Release" else "dwarf")
+                        DEBUG_INFORMATION_FORMAT="dwarf-with-dsym" if config == "Release" else "dwarf",
+                        # Match SwiftPM's active-destination Debug build. Without
+                        # this, the app/helper can also request an Intel module
+                        # while the package has produced only an ARM64 module.
+                        ONLY_ACTIVE_ARCH="NO" if config == "Release" else "YES")
         if config != "Release":
             settings.update(ENABLE_TESTABILITY="YES", SWIFT_ACTIVE_COMPILATION_CONDITIONS="DEBUG")
         if config == "NativeGamepad" and native:
