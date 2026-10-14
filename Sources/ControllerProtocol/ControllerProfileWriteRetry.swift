@@ -21,14 +21,16 @@ public enum ControllerProfileWriteRetry {
         // Scope the client here so each failed session closes before retrying.
         func attempt() throws -> ControllerProfileSnapshot {
             let client = ControllerProfileClient(channel: try makeChannel())
-            let current = try client.readActive()
-            guard current.identity == original.identity, current.slot == original.slot else {
-                throw ControllerProtocolError.conflict
-            }
-            let actual = try current.profile()
-            if !wrote {
-                guard current == original else { throw ControllerProtocolError.conflict }
-            } else {
+            var current = original
+            var actual = before
+            // apply() already reads and compares the full snapshot before its
+            // first write. Only interrupted writes need a separate reconciliation.
+            if wrote {
+                current = try client.readActive()
+                guard current.identity == original.identity, current.slot == original.slot else {
+                    throw ControllerProtocolError.conflict
+                }
+                actual = try current.profile()
                 guard actual.bytes.count == before.bytes.count, allowedVersions.contains(actual.dataVersion) else {
                     throw ControllerProtocolError.conflict
                 }

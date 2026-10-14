@@ -64,6 +64,26 @@ public final class ControllerDiagnostics: @unchecked Sendable {
     public func snapshot() -> [ControllerOperationEvent] { lock.withLock { events } }
     public func clear() { lock.withLock { events.removeAll(); omitted = 0 } }
 
+    /// Compact clipboard report: bounded event text, without raw packet dumps.
+    public func supportSummary(metadata: [String: String]) -> String {
+        let state = lock.withLock { (events, omitted) }
+        let traceStages: Set<String> = ["send", "receive", "feature receive", "planned send"]
+        let useful = state.0.filter { !traceStages.contains($0.stage) && $0.operation != "Interfaces" }
+        let formatter = ISO8601DateFormatter()
+        var lines = ["ControlLab diagnostic summary", "Captured: \(formatter.string(from: Date()))"]
+        lines += metadata.keys.sorted().map { "\($0): \(metadata[$0] ?? "")" }
+        lines.append("Earlier events dropped: \(state.1)")
+        if let failure = useful.last(where: { $0.stage == "failed" }) {
+            lines.append("Last failure: \(failure.operation) — \(failure.message.prefix(1000))")
+        }
+        lines.append("Recent events (up to 80; packet dumps excluded):")
+        for event in useful.suffix(80) {
+            let duration = event.elapsedMilliseconds.map { String(format: " %.0f ms", $0) } ?? ""
+            lines.append("\(formatter.string(from: event.date)) [\(event.operationID.uuidString.prefix(8))] \(event.operation) | \(event.mode.rawValue) | \(event.stage)\(duration): \(event.message.prefix(700))")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     public func export(metadata: [String: String]) throws -> Data {
         struct Archive: Encodable {
             let schemaVersion = 1

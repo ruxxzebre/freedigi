@@ -189,15 +189,30 @@ public final class ControllerProfileClient {
     public init(channel: any ControllerChannel) { self.channel = channel }
 
     private func response(_ command: UInt8, timeout: TimeInterval = 2) throws -> [UInt8] {
-        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        let start = ProcessInfo.processInfo.systemUptime
+        let deadline = start + timeout
+        var unmatched = 0
+        var headers: Set<String> = []
         do {
             while true {
                 let remaining = deadline - ProcessInfo.processInfo.systemUptime
                 guard remaining > 0 else { throw ControllerProtocolError.timeout }
                 let report = try channel.receive(timeout: remaining)
                 if ControllerCommand.matches(report, command) { return report }
+                unmatched += 1
+                if headers.count < 8 {
+                    if report.count >= 3, report.starts(with: [0x5a, 0xa5]) {
+                        headers.insert(String(format: "command 0x%02X", report[2]))
+                    } else if report.count >= 4, report[1] == 0x5a, report[2] == 0xa5 {
+                        headers.insert(String(format: "report ID 0x%02X / command 0x%02X", report[0], report[3]))
+                    } else { headers.insert("unrecognized framing") }
+                }
             }
         } catch ControllerProtocolError.timeout {
+            let headerSummary = headers.isEmpty ? "none" : headers.sorted().joined(separator: ", ")
+            ControllerDiagnostics.shared.record("Profile response", stage: "timeout",
+                message: "Expected \(String(format: "0x%02X", command)); \(unmatched) unmatched reports. Headers: \(headerSummary). No matching response arrived.",
+                elapsedMilliseconds: (ProcessInfo.processInfo.systemUptime - start) * 1000)
             let failure = ControllerProfileFailure(phase: phase, command: command, writesAttempted: writesAttempted)
             ControllerDiagnostics.shared.record("Profile command", stage: "failed", message: failure.description)
             throw failure

@@ -47,7 +47,8 @@ final class ControllerHIDSession: ControllerChannel {
         runLoop = CFRunLoopGetCurrent()
         buffer = .allocate(capacity: 512)
         buffer.initialize(repeating: 0, count: 512)
-        ControllerDiagnostics.shared.record("HID session", message: "Opened vendor \(vendor), product \(product.map { String($0) } ?? "auto"), usage page \(usagePage.map { String($0) } ?? "any").", operationID: traceID)
+        let actualProduct = (IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? NSNumber)?.intValue
+        ControllerDiagnostics.shared.record("HID session", message: "Opened vendor \(vendor), product \(actualProduct.map { String($0) } ?? "unknown"), usage page \(usagePage.map { String($0) } ?? "any"), location \(locationID.map { String($0) } ?? "unknown").", operationID: traceID)
         IOHIDDeviceRegisterInputReportCallback(device, buffer, 512, { pointer, result, _, _, _, report, length in
             guard let pointer else { return }
             let session = Unmanaged<ControllerHIDSession>.fromOpaque(pointer).takeUnretainedValue()
@@ -67,6 +68,7 @@ final class ControllerHIDSession: ControllerChannel {
         IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone))
         IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         buffer.deallocate()
+        ControllerDiagnostics.shared.record("HID session", stage: "closed", message: "Configuration interface released.", operationID: traceID)
     }
 
     func send(_ report: [UInt8]) throws {

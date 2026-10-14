@@ -293,6 +293,38 @@ final class ControllerProfileTests: XCTestCase {
         XCTAssertEqual(channel.mutations, [0xa4, 0xa5])
     }
 
+    func testFirstApplyHasOnePreflightReadBeforeMutating() throws {
+        let channel = try SimulatedController(bytes: fixture())
+        let before = try ControllerProfileClient(channel: channel).readActive()
+        var edited = try before.profile()
+        try edited.map(18, to: 4)
+        channel.commands.removeAll()
+        _ = try ControllerProfileWriteRetry.apply(edited, replacing: before, persist: false, waitBeforeRetry: {}) { channel }
+        let preflight = channel.commands.prefix { $0 != 0xa4 }
+        XCTAssertEqual(preflight.filter { $0 == 0xa3 }.count, 1)
+        XCTAssertEqual(preflight.filter { $0 == 1 }.count, 2) // Identity before and after the snapshot.
+    }
+
+    func testFirstApplyStillRejectsAStaleSnapshotBeforeWriting() throws {
+        let channel = try SimulatedController(bytes: fixture())
+        let before = try ControllerProfileClient(channel: channel).readActive()
+        var edited = try before.profile()
+        try edited.map(18, to: 4)
+        channel.bytes[400] ^= 1
+        XCTAssertThrowsError(try ControllerProfileWriteRetry.apply(edited, replacing: before, persist: true, waitBeforeRetry: {}) { channel })
+        XCTAssertTrue(channel.mutations.isEmpty)
+    }
+
+    func testTimeoutLogsUnexpectedFramingWithoutPacketPayloads() throws {
+        let channel = try SimulatedController(bytes: fixture())
+        channel.prefixResponseID = true
+        XCTAssertThrowsError(try ControllerProfileClient(channel: channel).identity())
+        let diagnostic = try XCTUnwrap(ControllerDiagnostics.shared.snapshot().last { $0.operation == "Profile response" })
+        XCTAssertTrue(diagnostic.message.contains("1 unmatched reports"))
+        XCTAssertTrue(diagnostic.message.contains("report ID 0x04 / command 0x01"))
+        XCTAssertNotNil(diagnostic.elapsedMilliseconds)
+    }
+
     func testCommandMatchesRecoveredWireBytes() {
         XCTAssertEqual(Array(ControllerCommand.frame(0xa3, payload: [2, 20]).prefix(7)),
                        [0x5a, 0xa5, 0xa3, 4, 2, 20, 0xbd])
@@ -310,6 +342,7 @@ private final class SimulatedController: ControllerChannel {
     var suppressIdentity = false, loseStartACK = false, suppressReadback = false
     var readbacksToDrop = 0
     var saveACKsToDrop = 0, readbacksAfterSaveToDrop = 0
+    var prefixResponseID = false
     var deviceID: UInt8 = 130
     var slot: UInt8 = 2
     var deviceAfterWrite: UInt8?, slotAfterWrite: UInt8?
@@ -369,6 +402,7 @@ private final class SimulatedController: ControllerChannel {
     }
     func receive(timeout: TimeInterval) throws -> [UInt8] {
         guard !queue.isEmpty else { throw ControllerProtocolError.timeout }
-        return queue.removeFirst()
+        let report = queue.removeFirst()
+        return prefixResponseID ? [4] + report : report
     }
 }

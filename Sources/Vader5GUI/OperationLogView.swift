@@ -27,6 +27,8 @@ struct OperationLogView: View {
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button("Inspect connected interfaces") { inspect() }.disabled(model.deviceBusy)
+                Button("Copy log") { copySummary() }
+                    .help("Copy build, connection state and recent operation results without raw packet dumps.")
                 Button("Export session log…") { export() }
                 Button("Clear log") { ControllerDiagnostics.shared.clear(); reload() }
             }
@@ -61,6 +63,24 @@ struct OperationLogView: View {
     }
 
     private func reload() { events = ControllerDiagnostics.shared.snapshot() }
+
+    private func copySummary() {
+        let summary = ControllerDiagnostics.shared.supportSummary(metadata: [
+            "Build": Bundle.main.object(forInfoDictionaryKey: "ControlLabSourceRevision") as? String ?? "development",
+            "App version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
+            "macOS": ProcessInfo.processInfo.operatingSystemVersionString,
+            "Transport": model.transport.rawValue,
+            "Input mode": model.mode.rawValue,
+            "Bridge status": String(describing: model.status),
+            "Monitoring paused": String(model.monitoringPaused),
+            "Execution mode": model.executionMode.rawValue,
+            "Operation in progress": String(model.operationInProgress),
+            "App error": model.errorMessage ?? "none",
+        ])
+        NSPasteboard.general.clearContents()
+        message = NSPasteboard.general.setString(summary, forType: .string)
+            ? "Diagnostic summary copied to clipboard." : "Could not copy the summary. Use Export session log instead."
+    }
 
     private func inspect() {
         Task {

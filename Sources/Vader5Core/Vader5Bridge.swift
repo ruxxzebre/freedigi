@@ -135,7 +135,9 @@ public final class Vader5Bridge {
 
     public func stop() {
         if let configDevice {
-            _ = send(Vader5Protocol.stopCommand)
+            let result = send(Vader5Protocol.stopCommand)
+            ControllerDiagnostics.shared.record("Input bridge", stage: "stopping",
+                message: "Stream-stop request returned \(String(format: "0x%08X", UInt32(bitPattern: result))); closing monitoring interface.")
             IOHIDDeviceUnscheduleFromRunLoop(
                 configDevice, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
             IOHIDDeviceClose(configDevice, IOOptionBits(kIOHIDOptionsTypeNone))

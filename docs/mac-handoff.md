@@ -141,6 +141,16 @@ One original backup covers the operation. Intermediate failures stay in Diagnost
 while the UI remains busy. Device validation is still required; simulator tests
 cover partial writes, dropped ACKs, stale data, retry limits and version tracking.
 
+Diagnostics includes **Copy log**, which copies build/app/OS versions, transport,
+monitoring state, the latest failure and up to 80 recent operation events. Raw
+packet dumps are excluded; the full JSON remains available through Export.
+Timeout events include elapsed time, the unmatched report count and recognized
+command/header types, allowing a silent interface to be distinguished from
+unexpected framing or unrelated replies. HID open/close and stream-stop results
+are recorded. A redundant first-attempt preflight read has been removed while
+retaining the complete stale-snapshot check. The user's `7cd20d6` identity timeout
+has not yet been reproduced on hardware; these changes do not establish its cause.
+
 ## Firmware
 
 The Firmware page prepares packages from the connected variant's official

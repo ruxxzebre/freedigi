@@ -3,6 +3,24 @@ import XCTest
 @testable import ControllerProtocol
 
 final class DiagnosticsTests: XCTestCase {
+    func testSupportSummaryContainsContextAndBoundedEventsWithoutPacketDumps() {
+        let log = ControllerDiagnostics()
+        log.record("Write profile", stage: "failed", message: "Identity timed out")
+        log.wireTracing = true
+        log.trace("USB", direction: "receive", report: [0xde, 0xad, 0xbe, 0xef], operationID: UUID())
+        log.record("Interfaces", message: "FULL_INTERFACE_DUMP")
+        for index in 0..<100 { log.record("Read attempt", message: "attempt-marker-\(index)") }
+        let summary = log.supportSummary(metadata: ["Build": "test-revision", "Transport": "USB receiver"])
+        XCTAssertTrue(summary.contains("Build: test-revision"))
+        XCTAssertTrue(summary.contains("Transport: USB receiver"))
+        XCTAssertTrue(summary.contains("Last failure: Write profile — Identity timed out"))
+        XCTAssertTrue(summary.contains("attempt-marker-99"))
+        XCTAssertFalse(summary.contains("attempt-marker-0\n"))
+        XCTAssertFalse(summary.contains("de ad be ef"))
+        XCTAssertFalse(summary.contains("FULL_INTERFACE_DUMP"))
+        XCTAssertEqual(summary.components(separatedBy: "attempt-marker-").count - 1, 80)
+    }
+
     func testFirmwareProgressDoesNotFloodUIAndKeepsStageChanges() {
         let filter = ControllerProgressFilter()
         XCTAssertTrue(filter.accept(stage: "Write", fraction: 0))
