@@ -22,7 +22,7 @@ private enum WorkspacePage: String, CaseIterable {
     var subtitle: String {
         switch self {
         case .controller: "Live input and motion data"
-        case .configuration: "Profiles, mappings, sticks, gyro, and triggers"
+        case .configuration: "Back buttons, profiles and calibration"
         case .lighting: "RGB effects and device presets"
         case .firmware: "Versions, packages, and safe diagnostics"
         case .diagnostics: "Operations, device information and exportable logs"

@@ -76,6 +76,14 @@ Equivalent CLI commands (close the GUI first):
 ```
 
 Profile edits currently expose simple button remaps, name and grip vibration.
+The Configuration page gives M1–M4 individual mapping menus. Picking a destination
+stages the assignment immediately; changed rows show the previous assignment.
+Other mappings are in an expandable section. Apply/Save stay in a fixed bottom
+bar; with Dry run enabled these become Preview actions. Discard edits restores
+the last read snapshot locally, and rereading warns before discarding edits.
+Calibration has its own card showing the last read device value separately from
+the pending toggle. These SwiftUI changes require a Mac build and visual check;
+Linux syntax checks do not validate rendering or Apple SDK type checking.
 Other settings and unknown bytes are preserved. Stick/trigger curves, gyro,
 turbo and macro editing in the advanced panel remain drafts. Backups are JSON
 snapshots of raw wire bytes, not the vendor's protobuf `.dat` export format.

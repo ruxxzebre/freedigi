@@ -8,30 +8,67 @@ struct CalibrationView: View {
     @State private var enabled = false
     @State private var message = "Read the controller to check automatic stick-calibration support."
     @State private var error: String?
+    @State private var isAccessing = false
 
     var body: some View {
-        GroupBox("Calibration") {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Automatic calibration adjusts stick centering in the controller. This setting applies across profiles.")
-                    .foregroundStyle(.secondary)
-                Button("Read calibration setting") { access(write: false) }
-                if let setting {
-                    if setting.supported {
-                        Toggle("Automatic stick calibration", isOn: $enabled)
-                        Button(model.dryRun ? "Preview calibration setting" : "Apply calibration setting") { access(write: true) }
-                            .disabled(enabled == setting.enabled)
-                    } else {
-                        Text("This firmware does not advertise automatic stick calibration.")
+        ConfigurationCard(title: "Stick calibration", subtitle: "Automatic centering is a controller setting shared across profiles.", icon: "scope") {
+            HStack(alignment: .center, spacing: 16) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Automatic stick calibration").font(.callout.weight(.semibold))
+                    Text("Lets the controller firmware adjust stick centering. Applying this setting changes whether the feature is enabled.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 12)
+                if let setting, setting.supported {
+                    Toggle("Automatic stick calibration", isOn: $enabled)
+                        .labelsHidden().toggleStyle(.switch).fixedSize()
+                        .disabled(model.operationInProgress)
+                } else {
+                    Text(setting == nil ? "NOT READ" : "UNAVAILABLE")
+                        .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(SpaceStationTheme.option, in: Capsule())
+                }
+            }
+            Divider()
+            HStack(spacing: 12) {
+                if isAccessing { ProgressView().controlSize(.small) }
+                else if let setting, setting.supported {
+                    Label("On controller: \(setting.enabled ? "On" : "Off")", systemImage: "gamecontroller")
+                        .font(.callout).foregroundStyle(.secondary)
+                    if enabled != setting.enabled {
+                        Text("Change staged").font(.caption).foregroundStyle(.orange)
                     }
                 }
-                Text(message).font(.caption).foregroundStyle(.secondary)
-                if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
-                Text("Manual stick, trigger and gyro calibration is not available in this build. Changing this setting does not run a manual calibration.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button(setting == nil ? "Read calibration setting" : "Read again") { access(write: false) }
+                    .buttonStyle(.bordered)
+                if let setting, setting.supported {
+                    Button(model.dryRun ? "Preview setting" : "Apply setting") { access(write: true) }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(enabled == setting.enabled)
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
-            .disabled(model.operationInProgress)
+            .controlSize(.large).disabled(model.operationInProgress)
+            Text(message).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let setting, !setting.supported {
+                Label("This firmware does not advertise automatic calibration support.", systemImage: "info.circle")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            if let error { Text(error).font(.callout).foregroundStyle(.red).textSelection(.enabled) }
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "info.circle").foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Looking for manual calibration?").font(.callout.weight(.medium))
+                    Text("The guided stick, trigger and gyro calibration procedure is not available in ControlLab yet. This switch does not start that procedure.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+            .background(SpaceStationTheme.option, in: RoundedRectangle(cornerRadius: 10))
         }
     }
 
@@ -49,6 +86,7 @@ struct CalibrationView: View {
             } catch { self.error = String(describing: error) }
             return
         }
+        isAccessing = true
         model.deviceBusy = true
         let resumeMonitoring = model.pauseMonitoringForDeviceAccess()
         error = nil
@@ -56,6 +94,7 @@ struct CalibrationView: View {
         Task {
             var verified = false
             defer {
+                isAccessing = false
                 model.deviceBusy = false
                 model.resumeMonitoringAfterDeviceAccess(ifNeeded: resumeMonitoring && (!write || verified))
             }
