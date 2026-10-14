@@ -5,7 +5,7 @@ import Testing
 
 @Test func decodesFlydigiFirmwareCatalog() throws {
     let json = Data(#"""
-    {"code":0,"message":"OK","data":{"device_code":"k5","chip_list":{
+    {"code":0,"message":"OK","data":{"device_code":"f5","chip_list":{
       "main_chip":null,
       "dongle_chip":{"version":"2.1.3.0","url":"https://example.com/dongle.fwpkg","info":"Fixes","min_app_version":"4.1.0.20","is_push":0},
       "rf_chip":{"version":"1.1.3.0","url":"https://example.com/rf.fwpkg","info":"Fixes","min_app_version":"4.1.0.20","is_push":0},
@@ -33,6 +33,13 @@ import Testing
 
     let finish = Vader5HIDOTAProtocol.finishReport(lastBlock: 1)
     #expect(finish.prefix(10) == [0x05, 0x02, 0x06, 0x00, 0x02, 0xff, 0x01, 0x00, 0xff, 0xff])
+}
+
+@Test func rejectsCatalogForAnotherController() {
+    let json = Data(#"{"code":0,"message":"OK","data":{"device_code":"k5","chip_list":{}}}"#.utf8)
+    #expect(throws: (any Error).self) {
+        _ = try Vader5FirmwareUpdateClient.decodeResponse(json)
+    }
 }
 
 @Test func recoveredCRCMatchesModbusVector() {

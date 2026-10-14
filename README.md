@@ -8,6 +8,12 @@ SDL3's standard gamepad layer over the profile already exposed by macOS.
 Static findings from the official Windows firmware updater, including the
 update endpoint and recovered HID OTA packet format, are in
 [`docs/windows-firmware-updater.md`](docs/windows-firmware-updater.md).
+The current firmware catalog uses Vader 5 Pro's `f5 / 130` identity and requests
+catalog compatibility with Space Station `4.2.0.9`, which includes this model. Earlier
+`k5 / 128` catalog results and NearLink package research describe Apex 5 and
+must not be used as evidence for Vader 5 firmware compatibility. Engine 5.0.1.6
+recovery notes and updater sources are in
+[`../research/engine-5.0.1.6/README.txt`](../research/engine-5.0.1.6/README.txt).
 The current BS20 package layout and full-size recovery simulations are recorded
 in [`docs/nearlink-firmware-analysis.md`](docs/nearlink-firmware-analysis.md).
 An Android HCI snoop workflow for capturing the official mobile updater is in
@@ -18,23 +24,22 @@ packet layout are in
 The verified Charging Station 2 Pro display framing is documented in
 [`docs/flydigi-dock-rgb.md`](docs/flydigi-dock-rgb.md).
 
-The app now includes a **Firmware Diagnostics** section that reads the connected
-controller's current firmware versions over USB, checks those versions against
-Flydigi's service, downloads available packages to a user-selected file, inspects
-packages, and runs an in-memory OTA simulator. Downloads are storage-only;
-attempts to request a real firmware update are refused. The app does not switch
-USB modes, erase, or write controller firmware.
+The **Configuration** page now reads the active device profile and applies button
+mappings, names and grip-vibration enablement. Writes preserve unknown fields,
+create a JSON backup, reject stale snapshots, and verify readback. Advanced
+stick, trigger, gyro and macro controls remain local drafts.
 
-Flydigi currently returns package links using HTTP. The downloader upgrades the
-known `api-web.cdn.flydigi.com` host to its working HTTPS endpoint and rejects
-unrecognized insecure download hosts.
+The **Firmware** page prepares an update from the connected device's official
+catalog, validates the package, and offers an explicit install action. Native
+transfer implementations cover Telink RF/receiver, Jieli HID `.bin`, Megahunt
+K6UP and the legacy `0483:5720` feature protocol. The installer binds the update
+to the device identity and USB location and checks the installed version after
+reconnection. Jieli `.ufw` and unidentified bootloader transitions are unsupported.
+These new device-write paths are **experimental and not hardware-tested**.
 
-> [!IMPORTANT]
-> The firmware update process still requires testing on Windows with the official
-> Flydigi application. In particular, the NearLink `SwitchUsb` transition,
-> boot-mode USB identity, `.fwpkg` validation, acknowledgements, failure recovery,
-> and rollback behavior must be captured and verified before real firmware writes
-> are enabled on macOS. Do not use Firmware Diagnostics as a production updater.
+For the exact build steps and remaining Mac checks, see
+[`docs/mac-handoff.md`](docs/mac-handoff.md). The app requires macOS; its portable
+protocol target and replay tests also build on Linux with Swift 6.
 
 ## Hardware
 
@@ -50,7 +55,8 @@ initialization sequence, and decodes the resulting `5A A5 EF` reports.
 
 ## Current status
 
-Working and tested on Apple silicon:
+Baseline features previously tested on Apple silicon (the new worker thread,
+profile writes and firmware installer still need Mac validation):
 
 - receiver discovery and user-space access
 - Flydigi initialization handshake
@@ -105,14 +111,11 @@ plus matching brightness, cycle-time, direction, and palette controls.
 It also reads and applies Space Station's charging and power behavior toggles.
 The core API accepts a full 162-pixel frame for custom designs and animations.
 
-The **Configuration** workspace mirrors Space Station's four-profile layout and
-its Common, Button, Joystick, Gyro, and Trigger option groups. It includes local
-drafts for button assignments, turbo and macros, circularity algorithms,
-sensitivity curves, active ranges and dead zones, gyro mapping, trigger ranges,
-vibration, sleep time, joystick accuracy, debounce, and center sensitivity.
-These drafts persist on the Mac. Applying profile settings to controller memory
-remains disabled until the corresponding Vader 5 USB write protocol is captured
-and validated; ControlLab does not send guessed configuration packets.
+The Configuration page operates on the controller's active PC profile (wire IDs
+0–3, shown as 1–4). Select a profile on the device and read it before editing.
+“Apply until restart” changes RAM; “Save to controller” also persists the profile.
+The CLI can export and restore a backup on the same device and profile.
+Advanced local drafts are kept in a separate disclosure and are not sent.
 
 ## Architecture
 
@@ -148,7 +151,8 @@ saved automatically on the Mac and reused by the other controller previews;
 
 ## Build
 
-Xcode command-line tools are required. The repository vendors the universal
+Swift 6 / Xcode 16 or newer command-line tools are required. Run
+`./scripts/build-mac.sh` to test, build the CLI, and package the app. The repository vendors the universal
 macOS framework from the official
 [SDL 3.4.12 release](https://github.com/libsdl-org/SDL/releases/tag/release-3.4.12),
 and `make app` embeds and signs it inside `ControlLab.app`.
@@ -204,6 +208,8 @@ file is included as `ControlLab.entitlements`. Set `SIGNING_IDENTITY` when packa
 an approved build:
 
 ```sh
+ENABLE_VIRTUAL_HID=1 \
+PROVISIONING_PROFILE="/path/to/approved.provisionprofile" \
 SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" make app
 ```
 

@@ -1,0 +1,10 @@
+{
+  "fixture": "vader5-default-sdk.bin",
+  "sha256": "703cf9c2ac378b1dbf85a3c12b91fdd50354114a7bd97ea322b69facb003ece2",
+  "source": "research/4.2.0.9/installer/app/Configs/Controller/f5/default/default_mapping_130.dat",
+  "source_sha256": "a6136d529b21d3f611828474e37de23687bd3c9860a7e99c09fd547dd0527c5e",
+  "serializer": "research/engine-5.0.1.6/assemblies/Flydigi.ControllerSdk.dll",
+  "serializer_sha256": "91c47740eecd5a34101b661c87e6927bda4cbff1c54800b1e84143b0a09995c2",
+  "method": "MappingConfigParser.ParseConfigToArray(firstProfile, 20)",
+  "note": "Official factory protobuf decoded and serialized using the shipped managed SDK on Linux. Not captured from physical hardware."
+}

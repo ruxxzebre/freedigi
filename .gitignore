@@ -1,5 +1,6 @@
 .DS_Store
 .build/
+.build-portable/
 build/
 DerivedData/
 VirtualHID.o

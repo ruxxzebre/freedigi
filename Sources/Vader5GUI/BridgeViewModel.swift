@@ -40,8 +40,9 @@ final class BridgeViewModel: ObservableObject {
     @Published var isApplyingDockLighting = false
     @Published var isApplyingDockSettings = false
     @Published var isApplyingLighting = false
+    @Published var deviceBusy = false
 
-    private let bridge = Vader5Bridge()
+    private let bridge = Vader5BridgeWorker()
     private let dock = FlydigiDock()
     private struct LightingDraft {
         var colors: [Color]
@@ -83,6 +84,7 @@ final class BridgeViewModel: ObservableObject {
     }
 
     func toggle() {
+        guard !deviceBusy else { return }
         errorMessage = nil
         if isRunning {
             bridge.stop()
@@ -102,6 +104,7 @@ final class BridgeViewModel: ObservableObject {
     }
 
     func applyLighting() {
+        guard !deviceBusy else { return }
         errorMessage = nil
         saveLightingDraft()
         let configuration = Vader5LightingConfiguration(

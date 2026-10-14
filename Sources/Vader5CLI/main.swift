@@ -2,6 +2,8 @@ import Foundation
 import AppKit
 import Vader5Core
 
+if let result = runProfileCommands(CommandLine.arguments) { exit(result) }
+
 func parseRGBHex(_ input: String) -> Vader5RGBColor? {
     let value = input.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
     guard value.count == 6, let number = UInt32(value, radix: 16) else { return nil }

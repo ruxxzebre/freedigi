@@ -1,0 +1,100 @@
+# Mac build and device validation
+
+The new code has portable Linux tests. It has not yet been compiled against
+Apple's SDK or tested on a physical controller in this session. A Mac build and
+the checks below are still required. Earlier README hardware results apply to
+the pre-existing input/lighting implementation, not these changes.
+
+## Build on the laptop
+
+Install Xcode 16+ or Swift 6+ command-line tools, then run from the ControlLab
+repository root (the `macos` directory if copying the whole decompilation workspace):
+
+```sh
+xcode-select --install  # only if the tools are absent
+./scripts/build-mac.sh
+open build/ControlLab.app
+```
+
+The script runs all tests, builds the release CLI, packages both GUI executables
+and SDL, and verifies the app's ad-hoc signature. It needs no Windows installer,
+decompilation tools, Go, Node, or research directory. Default signing does not
+include Apple's restricted virtual-device entitlement. A Developer ID alone
+does not grant it; `ENABLE_VIRTUAL_HID=1` requires an approved provisioning profile.
+
+The checked-in GitHub Actions workflow runs the same Mac build on a hosted runner.
+It does not exercise USB hardware.
+
+## First device checks
+
+1. Connect one Vader 5 Pro, wake it, select its PC mode and choose **Monitor only**.
+   Confirm buttons, sticks, triggers and motion. The GUI's HID worker forwards
+   every virtual report before publishing UI state at up to 60 Hz. No end-to-end
+   latency number has been measured.
+2. Stop monitoring. In **Configuration**, read the active profile and export a
+   backup. Verify the device ID (130, 144 or 145), slot and title.
+3. Change one spare-button mapping and use **Apply until restart**. Confirm the
+   effect physically, then read again. A readback failure leaves persistence
+   unattempted; it does not imply automatic rollback of RAM changes.
+4. Restore the backup or save the desired mapping. Reconnect and read again to
+   check persistence. The app automatically keeps before-write backups under
+   `~/Library/Application Support/ControlLab/ProfileBackups`.
+
+Equivalent CLI commands (close the GUI first):
+
+```sh
+.build/release/controllab-cli --devices
+.build/release/controllab-cli --profile-read before.json
+.build/release/controllab-cli --profile-map 18 4       # M1 -> A, RAM only
+.build/release/controllab-cli --profile-restore before.json
+.build/release/controllab-cli --profile-map 18 4 --save
+```
+
+Profile edits currently expose simple button remaps, name and grip vibration.
+Other settings and unknown bytes are preserved. Stick/trigger curves, gyro,
+turbo and macro editing in the advanced panel remain drafts. Backups are JSON
+snapshots of raw wire bytes, not the vendor's protobuf `.dat` export format.
+
+## Firmware
+
+The Firmware page prepares packages from the connected variant's official
+catalog. A null release means the service offered no package for that query;
+it does not prove the device is up to date. Controller chips require a wired
+connection; a receiver update requires connection through the receiver.
+
+The install action performs real writes. The native transports and bootloader
+transition have not been hardware-validated. Test enumeration and metadata first.
+The prepared package is held unchanged in memory, with a SHA-256 shown for
+diagnostics. This hash is not a vendor signature or proof of authenticity.
+
+| Chip | Implemented transfer | Remaining physical checks |
+| --- | --- | --- |
+| RF / receiver | Telink report 5, CRC16 blocks, completion response | Correct interface, ACK shape, reset and version |
+| SI | Jieli A1/A2 HID `.bin`, CRC16, fragment ACKs, verify/status | Boot PID 2F09, USB location continuity, version |
+| Main | Megahunt K6UP PID 2F05, vector/capacity checks, status watermarks | Actual Vader bootloader family, commit and reset |
+| Main legacy | 0483:5720 feature reports, full byte and metadata readback | Boot transition, feature-report framing, USB location |
+
+Unrecognized transitions (including a 2503-only device) stop without an image
+write. The installer does not guess a second boot-mode command. Jieli `.ufw`
+packages still require the vendor Windows updater. These are real remaining
+compatibility gaps, not problems solved by compiling on macOS.
+
+No update retries an ambiguous write automatically. A timeout after commit or
+reset can mean the update succeeded but could not be verified. Keep the error,
+reconnect normally and read the installed version before deciding what to do.
+No automatic rollback or firmware recovery guarantee is provided. The app blocks
+ordinary Quit and requests that macOS stay awake during an active update.
+
+## Validation performed on Linux
+
+`swift test --scratch-path .build-portable` builds the independent
+`ControllerProtocol` target. Tests cover a factory profile serialized by the
+actual shipped SDK, packet reordering/duplicates, stale snapshots, missing ACKs,
+readback corruption, chip transfer failures, fragment boundaries, CRC vectors,
+Megahunt watermarks and legacy full-image verification. The fixture's provenance
+and hashes are in `Tests/ControllerProtocolTests/Fixtures`.
+
+`scripts/check-portable.sh` also syntax-parses every Swift file. Syntax parsing
+does not validate SwiftUI APIs, IOKit linking, Apple SDK concurrency annotations,
+code signing, entitlements, or hardware behavior. The Mac script resolves the
+build portion of that remaining work.

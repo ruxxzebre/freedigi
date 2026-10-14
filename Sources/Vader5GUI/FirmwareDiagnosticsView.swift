@@ -42,7 +42,8 @@ final class FirmwareDiagnosticsViewModel: ObservableObject {
                 lastFirmwareCheck = Date()
                 availableFirmware = try await Vader5FirmwareUpdateClient().check(
                     versions: versions,
-                    appVersion: "4.1.0.31"
+                    // Catalog compatibility version with confirmed Vader 5 support.
+                    appVersion: "4.2.0.9"
                 )
                 hasCheckedFirmware = true
             } catch {
@@ -142,7 +143,6 @@ struct FirmwareDiagnosticsView: View {
         ScrollView {
             VStack(spacing: 18) {
                 safetyCard
-                firmwareCard
                 HStack(alignment: .top, spacing: 18) {
                     packageCard
                     simulatorCard
@@ -151,13 +151,12 @@ struct FirmwareDiagnosticsView: View {
             }
             .padding(22)
         }
-        .task { model.checkFirmwareIfNeeded() }
     }
 
     private var safetyCard: some View {
         GroupBox {
             Label(
-                "Firmware metadata requires the USB receiver. Packages can be downloaded to a file you choose, while erase, write, and update-mode commands remain unavailable.",
+                "These tools inspect saved packages and simulate transfers. Use the separate prepared-update action above for a real firmware installation.",
                 systemImage: "lock.shield.fill"
             )
             .foregroundStyle(.green)

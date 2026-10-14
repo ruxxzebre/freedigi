@@ -1,6 +1,17 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
+#if os(Linux)
+let package = Package(
+    name: "ControlLab",
+    products: [.library(name: "ControllerProtocol", targets: ["ControllerProtocol"])],
+    targets: [
+        .target(name: "ControllerProtocol"),
+        .testTarget(name: "ControllerProtocolTests", dependencies: ["ControllerProtocol"],
+                    resources: [.copy("Fixtures")]),
+    ]
+)
+#else
 let package = Package(
     name: "ControlLab",
     platforms: [.macOS(.v13)],
@@ -13,6 +24,9 @@ let package = Package(
             targets: ["ControlLabRGBPreview"]),
     ],
     targets: [
+        .target(name: "ControllerProtocol"),
+        .testTarget(name: "ControllerProtocolTests", dependencies: ["ControllerProtocol"],
+                    resources: [.copy("Fixtures")]),
         .binaryTarget(
             name: "SDL3",
             path: "Vendor/SDL3.xcframework"
@@ -34,7 +48,7 @@ let package = Package(
         ),
         .target(
             name: "Vader5Core",
-            dependencies: ["Vader5CoreC", "SDLGamepadC"],
+            dependencies: ["Vader5CoreC", "SDLGamepadC", "ControllerProtocol"],
             path: "Sources/Vader5Core",
             linkerSettings: [.linkedFramework("IOKit")]
         ),
@@ -68,9 +82,11 @@ let package = Package(
                 "ContentView.swift",
                 "ControlLabApp.swift",
                 "ControllerConfigurationView.swift",
+                "DeviceProfilesView.swift",
                 "ControllerInputView.swift",
                 "DockFactoryLightingStore.swift",
                 "FirmwareDiagnosticsView.swift",
+                "FirmwareInstallView.swift",
                 "RGBPreviewProcess.swift",
                 "SpaceStationTheme.swift",
             ],
@@ -90,3 +106,4 @@ let package = Package(
         ),
     ]
 )
+#endif

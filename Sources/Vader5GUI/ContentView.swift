@@ -162,10 +162,10 @@ struct ContentView: View {
     @ViewBuilder private var pageContent: some View {
         switch page {
         case .controller: controllerPage
-        case .configuration: ControllerConfigurationView(state: model.state)
+        case .configuration: DeviceProfilesView(model: model)
         case .lighting: lightingPage
         case .firmware:
-            FirmwareDiagnosticsView().background(CLTheme.background)
+            FirmwareInstallView(bridge: model).background(CLTheme.background)
         }
     }
 

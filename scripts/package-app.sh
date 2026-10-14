@@ -9,6 +9,16 @@ preview_binary="${repo_dir}/.build/${configuration}/ControlLabRGBPreview"
 sdl_framework="${repo_dir}/Vendor/SDL3.xcframework/macos-arm64_x86_64/SDL3.framework"
 
 cd "${repo_dir}"
+if [[ "$(uname -s)" != "Darwin" ]]; then
+    print -u2 "Packaging requires macOS and Xcode command-line tools."
+    exit 1
+fi
+if [[ "${ENABLE_VIRTUAL_HID:-0}" == "1" ]]; then
+    if [[ -z "${SIGNING_IDENTITY:-}" || -z "${PROVISIONING_PROFILE:-}" || ! -f "${PROVISIONING_PROFILE}" ]]; then
+        print -u2 "Virtual HID requires SIGNING_IDENTITY and an approved PROVISIONING_PROFILE file."
+        exit 1
+    fi
+fi
 swift_build_args=(-c "${configuration}" --product ControlLab)
 preview_build_args=(-c "${configuration}" --product ControlLabRGBPreview)
 if [[ "${SWIFTPM_DISABLE_SANDBOX:-0}" == "1" ]]; then
@@ -46,12 +56,18 @@ if [[ -n "${SIGNING_IDENTITY:-}" ]]; then
         "${app_dir}/Contents/Frameworks/SDL3.framework"
     codesign --force --options runtime --timestamp --sign "${SIGNING_IDENTITY}" \
         "${app_dir}/Contents/MacOS/ControlLabRGBPreview"
-    codesign --force --options runtime --timestamp --sign "${SIGNING_IDENTITY}" \
-        --entitlements "${repo_dir}/ControlLab.entitlements" "${app_dir}"
+    signing_args=(--force --options runtime --timestamp --sign "${SIGNING_IDENTITY}")
+    if [[ "${ENABLE_VIRTUAL_HID:-0}" == "1" ]]; then
+        cp "${PROVISIONING_PROFILE}" "${app_dir}/Contents/embedded.provisionprofile"
+        signing_args+=(--entitlements "${repo_dir}/ControlLab.entitlements")
+    fi
+    codesign "${signing_args[@]}" "${app_dir}"
 else
     codesign --force --sign - "${app_dir}/Contents/Frameworks/SDL3.framework"
     codesign --force --sign - "${app_dir}/Contents/MacOS/ControlLabRGBPreview"
     codesign --force --sign - "${app_dir}"
 fi
+
+codesign --verify --deep --strict "${app_dir}"
 
 print "Built ${app_dir}"

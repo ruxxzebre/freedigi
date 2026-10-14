@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import ControllerProtocol
 
 public struct Vader5FirmwarePackageInfo: Sendable, Equatable {
     public let fileName: String

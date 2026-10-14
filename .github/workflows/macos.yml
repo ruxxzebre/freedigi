@@ -1,0 +1,13 @@
+name: macOS build
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test and package without restricted entitlements
+        run: ./scripts/build-mac.sh
