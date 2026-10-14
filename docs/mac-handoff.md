@@ -56,7 +56,15 @@ does not grant it; `ENABLE_VIRTUAL_HID=1` requires an approved provisioning prof
 The checked-in GitHub Actions workflow runs the same Mac build on a hosted runner.
 It does not exercise USB hardware.
 
-Updates retain Swift's `.build` cache and use one configuration, avoiding the
+Build and packaging explicitly select `--build-system native` and share the
+`.build/native` scratch directory. This avoids relying on newer toolchains'
+default backend and isolates any earlier Xcode-backend artifacts. Packaging asks
+SwiftPM for the binary directory with `--show-bin-path`. The first build after
+this change creates a new cache; existing caches and source files are preserved.
+The shared optimized build passes `-Xswiftc -enable-testing` so test suites can
+use `@testable` imports in release configuration as well as debug.
+
+Updates retain Swift's `.build/native` cache and use one configuration, avoiding the
 previous fresh checkout and separate debug-test/release-app builds. Optimized
 Swift may still rebuild an entire changed module; toolchain/SDK changes can also
 invalidate caches. No Mac speedup has been measured here. For local development,
@@ -81,11 +89,11 @@ optimized release builds. Tests and signature verification remain enabled.
 Equivalent CLI commands (close the GUI first):
 
 ```sh
-.build/release/controllab-cli --devices
-.build/release/controllab-cli --profile-read before.json
-.build/release/controllab-cli --profile-map 18 4       # M1 -> A, RAM only
-.build/release/controllab-cli --profile-restore before.json
-.build/release/controllab-cli --profile-map 18 4 --save
+.build/native/release/controllab-cli --devices
+.build/native/release/controllab-cli --profile-read before.json
+.build/native/release/controllab-cli --profile-map 18 4       # M1 -> A, RAM only
+.build/native/release/controllab-cli --profile-restore before.json
+.build/native/release/controllab-cli --profile-map 18 4 --save
 ```
 
 Profile edits currently expose simple button remaps, name and grip vibration.

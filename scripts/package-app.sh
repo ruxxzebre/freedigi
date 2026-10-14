@@ -3,9 +3,8 @@ set -euo pipefail
 
 repo_dir="${0:A:h:h}"
 configuration="${CONFIGURATION:-release}"
+case "$configuration" in debug|release) ;; *) print -u2 'CONFIGURATION must be debug or release.'; exit 1 ;; esac
 app_dir="${repo_dir}/build/ControlLab.app"
-binary="${repo_dir}/.build/${configuration}/ControlLab"
-preview_binary="${repo_dir}/.build/${configuration}/ControlLabRGBPreview"
 sdl_framework="${repo_dir}/Vendor/SDL3.xcframework/macos-arm64_x86_64/SDL3.framework"
 
 cd "${repo_dir}"
@@ -19,13 +18,16 @@ if [[ "${ENABLE_VIRTUAL_HID:-0}" == "1" ]]; then
         exit 1
     fi
 fi
+swift_build_args=(--build-system native --scratch-path .build/native -c "${configuration}" -Xswiftc -enable-testing)
+if [[ "${SWIFTPM_DISABLE_SANDBOX:-0}" == "1" ]]; then
+    swift_build_args+=(--disable-sandbox)
+fi
 if [[ "${CONTROLLAB_SKIP_BUILD:-0}" != "1" ]]; then
-    swift_build_args=(-c "${configuration}")
-    if [[ "${SWIFTPM_DISABLE_SANDBOX:-0}" == "1" ]]; then
-        swift_build_args+=(--disable-sandbox)
-    fi
     swift build "${swift_build_args[@]}"
 fi
+bin_dir="$(swift build "${swift_build_args[@]}" --show-bin-path)"
+binary="${bin_dir}/ControlLab"
+preview_binary="${bin_dir}/ControlLabRGBPreview"
 [[ -x "${binary}" && -x "${preview_binary}" ]] || { print -u2 "App binaries are missing. Run ./scripts/build-mac.sh."; exit 1; }
 rm -rf "${app_dir}"
 mkdir -p "${app_dir}/Contents/MacOS" "${app_dir}/Contents/Resources/ThirdPartyNotices" \

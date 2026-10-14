@@ -17,10 +17,13 @@ fi
 swift --version
 configuration="${CONFIGURATION:-release}"
 case "$configuration" in debug|release) ;; *) echo 'CONFIGURATION must be debug or release.' >&2; exit 1 ;; esac
-build_args=(-c "$configuration")
+build_args=(--build-system native --scratch-path .build/native -c "$configuration" -Xswiftc -enable-testing)
 if [[ "${SWIFTPM_DISABLE_SANDBOX:-0}" == 1 ]]; then build_args+=(--disable-sandbox); fi
 # One configuration and one build graph for the app, preview, CLI and tests.
-# Keep .build in this checkout so subsequent updates reuse compiled modules.
+# Pin the backend: newer toolchains default to Swift Build/Xcode, whose module
+# handling and artifact layout differ. Isolate its old cache without deleting it.
+# Keep .build/native in this checkout so subsequent updates reuse compiled modules.
+# Release builds need explicit test access for the suites' @testable imports.
 swift build "${build_args[@]}" --build-tests
 swift test "${build_args[@]}" --skip-build
 CONFIGURATION="$configuration" CONTROLLAB_SKIP_BUILD=1 ./scripts/package-app.sh
