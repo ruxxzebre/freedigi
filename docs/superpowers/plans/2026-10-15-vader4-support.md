@@ -25,7 +25,7 @@
 - [x] Reuse the service's mapping/lighting data contract, dry-run behavior and backups. Check identity, slot and original bytes before writing; require matching ACK indexes and full readback. Never replay uncertain classic writes automatically.
 - [x] Return unsupported capability values for unimplemented Turbo/calibration switches; reject writes to them. Explain DInput connection requirements and hardware validation limits.
 - [x] Run Linux `FREEDIGI_BUILD=1 swift test` (99 tests), native Cargo tests (14 tests), Clippy, formatting and helper contract checks. All passed; no physical-device settings were changed. All 62 Swift files also passed syntax parsing.
-- [ ] Run macOS desktop and legacy Swift tests on a Mac; this completion pass ran on Linux.
+- [x] Run macOS desktop and legacy Swift tests on a Mac. Hosted Intel and Apple silicon runners both passed during native 0.2.0 packaging; see `docs/freedigi-validation.md`.
 
 ### Task 2: Review
 

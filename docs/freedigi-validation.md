@@ -1,4 +1,19 @@
-# FreeDigi preview validation
+# FreeDigi validation
+
+## Native 0.2.0 packages (2026-10-15)
+
+The release packages passed builds and automated checks on Linux amd64/arm64 and macOS Intel/Apple silicon. Evidence: [Linux package checks](https://github.com/ruxxzebre/freedigi/actions/runs/38801704109) and [Mac package checks](https://github.com/ruxxzebre/freedigi/actions/runs/38801704250).
+
+- Linux: 99 Swift tests and 14 Rust tests on each architecture. Both `.deb` packages passed installation, helper self-test/contracts, graphical startup under Xvfb, and removal in clean Debian 13 and Ubuntu 24.04 containers.
+- Arch x86_64: `makepkg` produced the `.pkg.tar.zst`, which passed installation with dependencies, helper/contracts, graphical startup and removal in a clean Arch container.
+- macOS: 98 desktop Swift tests and 14 Rust tests on each architecture. The legacy integration suite also passed (86 XCTest and 48 Swift Testing tests). Both app bundles passed ad-hoc signature verification and both disk images passed `hdiutil verify`.
+- Packages include their helper, notices, icon and installation instructions; Linux installers include menu entries and udev rules. Linux artifacts require glibc 2.39 or newer. Mac apps are ad-hoc signed, not Apple-notarized.
+
+The clean Debian startup test caught and verified the fix for a missing `libxkbcommon-x11` runtime dependency. ARM64 setup now verifies and installs the official signed ARM Swift archive. One x64 container download failed with a registry HTTP 502; the retry passed all checks.
+
+These checks establish packaging and software behavior, not physical-controller compatibility. No physical Vader 4 has been tested, and no settings were written to hardware. The earlier platform limitations below describe previous validation stages.
+
+## Historical preview checks
 
 Validated on a Linux amd64 Ubuntu 24.04 host with Swift 6.0.3, Go 1.26.2, Node 25.9.0, Wails 2.15.0 and WebKitGTK 4.1 (2.52.6).
 
