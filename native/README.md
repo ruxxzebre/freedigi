@@ -3,6 +3,8 @@
 Rust + egui interface for Linux and macOS, using the existing ControlLab-derived
 Swift controller service.
 
+For downloadable packages, see the [installation guide](packaging/README.md).
+
 ## Run
 
 With Rust and Swift 6 installed, from the repository root:
@@ -14,7 +16,7 @@ FREEDIGI_SERVICE="$(pwd)/.build/debug/controllab-service" cargo run --locked --m
 
 Or use `nix develop` for the pinned Rust compiler and Linux graphics libraries.
 The flake uses the same nixpkgs revision as Chaiky/Core. `Cargo.lock` pins Rust
-crates. Swift 6 is separate: Linux builds use Swift 6.0.3; macOS uses the laptop's
+crates. Swift 6 is separate: Linux builds use Swift 6.0.3; macOS uses the
 Xcode Swift compiler and SDK. The pinned nixpkgs Swift 5.10 is too old. This is
 not a claim of a fully Nix-built Apple SDK or Swift service.
 
@@ -88,7 +90,16 @@ The script uses at most eight compiler jobs by default. Set
 `FREEDIGI_BUILD_JOBS=4` to reduce peak memory on a smaller laptop, or increase it
 explicitly on a larger machine. The first build downloads/compiles dependencies;
 later builds reuse them. On Mac the ready-to-open result is
-`native/dist/FreeDigi.app`, alongside the distributable zip.
+`native/dist/FreeDigi.app`, alongside the distributable zip and disk image.
+
+On Debian/Ubuntu, install `dpkg-dev` and create a `.deb` from the portable build:
+
+```sh
+python3 native/scripts/package-linux.py --archive native/dist/FreeDigi-linux-amd64.tar.gz --format deb
+```
+
+Use `linux-arm64.tar.gz` on ARM64. On Arch x86_64, the same command with
+`--format arch` uses `makepkg` to create a `.pkg.tar.zst`; run it as a normal user.
 
 ## Interface and memory diagnostics
 

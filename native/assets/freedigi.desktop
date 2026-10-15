@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=FreeDigi
+Comment=Configure Flydigi controllers
+Exec=freedigi
+Icon=freedigi
+Terminal=false
+Categories=Settings;
+Keywords=Flydigi;Vader;Controller;Gamepad;

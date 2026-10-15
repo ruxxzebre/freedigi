@@ -11,6 +11,7 @@ jobs="${FREEDIGI_BUILD_JOBS:-${CARGO_BUILD_JOBS:-$cores}}"
 case "$jobs" in ''|*[!0-9]*|0) printf 'Build jobs must be a positive integer.\n' >&2; exit 1 ;; esac
 printf 'FreeDigi: incremental release build, up to %s compiler jobs\n' "$jobs"
 export FREEDIGI_REVISION="$(git rev-parse --short HEAD)"
+version="$(python3 -c 'import tomllib; print(tomllib.load(open("native/Cargo.toml", "rb"))["package"]["version"])')"
 arch="$(uname -m)"
 case "$arch" in x86_64) arch=amd64 ;; arm64|aarch64) arch=arm64 ;; *) exit 1 ;; esac
 case "$(uname -s)" in
@@ -43,12 +44,12 @@ if [ "$platform" = macos ]; then
   bin="$app/Contents/MacOS"
   resources="$app/Contents/Resources"
   mkdir -p "$bin" "$resources"
-  python3 - "$app/Contents/Info.plist" <<'PYTHON'
+  python3 - "$app/Contents/Info.plist" "$version" <<'PYTHON'
 import plistlib
 import sys
 with open("native/assets/Info.plist", "rb") as source:
     info = plistlib.load(source)
-info.update(CFBundleExecutable="freedigi", CFBundleVersion="0.2.0", CFBundleShortVersionString="0.2.0", CFBundleIconFile="freedigi")
+info.update(CFBundleExecutable="freedigi", CFBundleVersion=sys.argv[2], CFBundleShortVersionString=sys.argv[2], CFBundleIconFile="freedigi")
 with open(sys.argv[1], "wb") as target:
     plistlib.dump(info, target)
 PYTHON
@@ -59,7 +60,7 @@ else
 fi
 install -m 755 native/target/release/freedigi "$bin/freedigi"
 install -m 755 "$helper_dir/controllab-service" "$bin/freedigi-service"
-cp LICENSE NOTICE native/README.md "$resources/"
+cp LICENSE NOTICE native/packaging/README.md "$resources/"
 python3 native/scripts/collect-notices.py > "$resources/THIRD_PARTY_NOTICES.txt"
 cp native/vendor/chaiky-theme/PROVENANCE.json "$resources/CHAIKY_PROVENANCE.json"
 if [ "$platform" = linux ]; then
@@ -91,6 +92,12 @@ if [ "$platform" = macos ]; then
   # Keep a ready-to-open bundle; users do not need to extract the archive.
   ditto "$app" "$native_dir/dist/FreeDigi.app"
   ditto -c -k --sequesterRsrc --keepParent "$app" "native/dist/FreeDigi-macos-$arch.zip"
+  dmg_root="$stage/disk-image"
+  mkdir -p "$dmg_root"
+  ditto "$app" "$dmg_root/FreeDigi.app"
+  ln -s /Applications "$dmg_root/Applications"
+  hdiutil create -volname FreeDigi -srcfolder "$dmg_root" -ov -format UDZO "native/dist/FreeDigi-macos-$arch.dmg"
+  hdiutil verify "native/dist/FreeDigi-macos-$arch.dmg"
   printf '\nOpen it with: open native/dist/FreeDigi.app\n'
 else
   strip --strip-unneeded "$bin/freedigi-service"

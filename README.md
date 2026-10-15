@@ -36,11 +36,23 @@ Supported experimentally: live buttons including C/Z and M1–M4, sticks/trigger
 
 **Vader 4 hardware has not been tested with this implementation.** Protocol sources include SDL's Flydigi input support and shared-classic protocol observations mainly made on Apex 4; controller-specific validation remains necessary. Follow the [Vader 4 hardware test checklist](docs/vader4-testing.md), starting with live reads and dry runs. This support does not cover XInput, Bluetooth configuration or firmware flashing.
 
-## Download and build
+## Download and install
 
-The `v0.1.0-preview` release is the older Wails build. The native egui interface is in `main`; native packages are produced by the FreeDigi workflows.
+Download FreeDigi from [Releases](https://github.com/ruxxzebre/freedigi/releases). Choose the package for your computer:
 
-See [Releases](https://github.com/ruxxzebre/freedigi/releases) for available builds, and [native/README.md](native/README.md) for installation, dependencies and local builds.
+| System | Package | Install |
+| --- | --- | --- |
+| Debian 13+ / Ubuntu 24.04+ | `.deb` (`amd64` or `arm64`) | `sudo apt install ./freedigi_*.deb` |
+| Arch Linux | `x86_64.pkg.tar.zst` | `sudo pacman -U ./freedigi-*.pkg.tar.zst` |
+| macOS, Apple silicon | `macos-arm64.dmg` | Drag FreeDigi into Applications |
+| macOS, Intel | `macos-amd64.dmg` | Drag FreeDigi into Applications |
+| Other Linux | `.tar.gz` (`amd64` or `arm64`) | Extract and run `FreeDigi/freedigi` |
+
+Debian and Arch packages include controller permissions and an applications-menu entry. Reconnect your controller after installation. Mac builds are ad-hoc signed and may require allowing the first launch in Privacy & Security. See the [installation guide](native/packaging/README.md) for details.
+
+The older `v0.1.0-preview` release uses the previous Wails interface.
+
+## Build from source
 
 ```sh
 git clone https://github.com/ruxxzebre/freedigi.git
