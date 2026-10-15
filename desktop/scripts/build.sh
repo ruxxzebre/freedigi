@@ -25,11 +25,12 @@ python3 "$desktop_dir/scripts/check-service.py" "$helper_dir/controllab-service"
 cd "$desktop_dir"
 go test -race ./internal/bridge
 "$wails_bin" build "${wails_flags[@]}" -ldflags "-X main.build=$revision"
+python3 scripts/collect-notices.py build/THIRD_PARTY_NOTICES.txt
 mkdir -p dist
 if [ "$target" = macos ]; then
  app="$desktop_dir/build/bin/FreeDigi.app"
  install -m 755 "$helper_dir/controllab-service" "$app/Contents/MacOS/freedigi-service"
- cp "$repo_dir/LICENSE" "$repo_dir/NOTICE" "$app/Contents/Resources/"
+ cp "$repo_dir/LICENSE" "$repo_dir/NOTICE" build/THIRD_PARTY_NOTICES.txt "$app/Contents/Resources/"
  codesign --force --sign - "$app/Contents/MacOS/freedigi-service"
  codesign --force --deep --sign - "$app"
  codesign --verify --deep --strict "$app"
@@ -44,7 +45,7 @@ else
  install -m 755 "$helper_dir/controllab-service" "$stage/FreeDigi/freedigi-service"
  strip --strip-unneeded "$stage/FreeDigi/freedigi-service"
  python3 scripts/check-service.py "$stage/FreeDigi/freedigi-service"
- cp assets/freedigi.png assets/70-freedigi.rules "$repo_dir/LICENSE" "$repo_dir/NOTICE" README.md "$stage/FreeDigi/"
+ cp assets/freedigi.png assets/70-freedigi.rules "$repo_dir/LICENSE" "$repo_dir/NOTICE" README.md build/THIRD_PARTY_NOTICES.txt "$stage/FreeDigi/"
  install -m 755 scripts/install-linux.sh "$stage/FreeDigi/install.sh"
  "$stage/FreeDigi/freedigi" --self-test
  tar -czf "dist/FreeDigi-linux-$arch.tar.gz" -C "$stage" FreeDigi

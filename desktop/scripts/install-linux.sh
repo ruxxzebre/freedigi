@@ -4,7 +4,7 @@ source_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 app_dir="${XDG_DATA_HOME:-$HOME/.local/share}/freedigi"
 desktop_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 mkdir -p "$app_dir" "$desktop_dir"
-for file in freedigi freedigi-service freedigi.png LICENSE NOTICE README.md 70-freedigi.rules; do
+for file in freedigi freedigi-service freedigi.png LICENSE NOTICE THIRD_PARTY_NOTICES.txt README.md 70-freedigi.rules; do
   install -m 644 "$source_dir/$file" "$app_dir/$file"
 done
 chmod 755 "$app_dir/freedigi" "$app_dir/freedigi-service"
