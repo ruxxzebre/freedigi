@@ -63,3 +63,17 @@ toggle and installed firmware versions. Advanced mappings are preserved until
 edited. Macro/combo editors, firmware installation, Bluetooth configuration and
 virtual gamepad output are not included. Hardware I/O still needs validation on
 an attached controller. Windows is explicit unsupported-transport groundwork.
+
+## Build speed
+
+The package script builds **release only**, including its tests. Release has
+incremental compilation and 16 codegen units; whole-program LTO is disabled to
+avoid a costly relink after small edits. Cargo and Swift reuse their build caches
+in this checkout. Keep the same directory between updates. Do not delete
+`native/target` or `.build` unless diagnosing a cache problem.
+
+The script uses at most eight compiler jobs by default. Set
+`FREEDIGI_BUILD_JOBS=4` to reduce peak memory on a smaller laptop, or increase it
+explicitly on a larger machine. The first build downloads/compiles dependencies;
+later builds reuse them. On Mac the ready-to-open result is
+`native/dist/FreeDigi.app`, alongside the distributable zip.

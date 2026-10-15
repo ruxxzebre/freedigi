@@ -16,14 +16,14 @@ The workflow uploads the archive as a GitHub Actions artifact; it does not autom
 
 ## Build directly without a runner
 
-Install Rust (the workflow uses 1.97.0) and select Xcode with Swift 6+. Then:
+Install Rust with rustup if `cargo` is missing, and select Xcode with Swift 6+.
+The repository pins Rust 1.97.0; rustup installs that version automatically. Then:
 
 ```sh
 git clone https://github.com/ruxxzebre/freedigi.git ~/Developer/FreeDigi
 cd ~/Developer/FreeDigi
 ./native/scripts/build.sh
-unzip -q native/dist/FreeDigi-macos-arm64.zip -d native/dist/macos
-open native/dist/macos/FreeDigi.app
+open native/dist/FreeDigi.app
 ```
 
 If the directory already contains your FreeDigi checkout, use `git pull --ff-only`

@@ -18,7 +18,7 @@ command -v npm >/dev/null
 wails_bin="${WAILS_BIN:-$(go env GOPATH)/bin/wails}"
 if [ ! -x "$wails_bin" ]; then go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0; fi
 cd "$repo_dir"
-swift test
+swift test -c release
 swift build "${swift_flags[@]}" --product controllab-service
 helper_dir="$(swift build "${swift_flags[@]}" --show-bin-path)"
 python3 "$desktop_dir/scripts/check-service.py" "$helper_dir/controllab-service"

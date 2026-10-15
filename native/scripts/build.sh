@@ -4,12 +4,18 @@ native_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 repo_dir="$(cd -- "$native_dir/.." && pwd)"
 cd "$repo_dir"
 export FREEDIGI_BUILD=1
+# Bound concurrency for laptop RAM while using more than Cargo's former 2 jobs.
+if [ "$(uname -s)" = Darwin ]; then cores="$(sysctl -n hw.ncpu)"; else cores="$(getconf _NPROCESSORS_ONLN)"; fi
+if [ "$cores" -gt 8 ]; then cores=8; fi
+jobs="${FREEDIGI_BUILD_JOBS:-${CARGO_BUILD_JOBS:-$cores}}"
+case "$jobs" in ''|*[!0-9]*|0) printf 'Build jobs must be a positive integer.\n' >&2; exit 1 ;; esac
+printf 'FreeDigi: incremental release build, up to %s compiler jobs\n' "$jobs"
 export FREEDIGI_REVISION="$(git rev-parse --short HEAD)"
 arch="$(uname -m)"
 case "$arch" in x86_64) arch=amd64 ;; arm64|aarch64) arch=arm64 ;; *) exit 1 ;; esac
 case "$(uname -s)" in
-  Linux) platform=linux; swift_flags=(-c release --static-swift-stdlib) ;;
-  Darwin) platform=macos; swift_flags=(-c release) ;;
+  Linux) platform=linux; swift_flags=(--build-system native -c release -Xswiftc -enable-testing --static-swift-stdlib) ;;
+  Darwin) platform=macos; swift_flags=(--build-system native -c release -Xswiftc -enable-testing) ;;
   *) printf 'Native packages support Linux and macOS.\n' >&2; exit 1 ;;
 esac
 # Swift's official Linux toolchain must use system binutils, not Nix's linker.
@@ -23,12 +29,12 @@ run_swift() {
     "$swift_program" "$@"
   fi
 }
-run_swift test
-run_swift build "${swift_flags[@]}" --product controllab-service
+run_swift test --build-system native -c release -Xswiftc -enable-testing -j "$jobs"
+run_swift build "${swift_flags[@]}" -j "$jobs" --product controllab-service
 helper_dir="$(run_swift build "${swift_flags[@]}" --show-bin-path)"
 python3 desktop/scripts/check-service.py "$helper_dir/controllab-service"
-cargo test --locked --manifest-path native/Cargo.toml -j "${CARGO_BUILD_JOBS:-2}"
-cargo build --locked --release --manifest-path native/Cargo.toml -j "${CARGO_BUILD_JOBS:-2}"
+cargo test --locked --release --manifest-path native/Cargo.toml -j "$jobs"
+cargo build --locked --release --manifest-path native/Cargo.toml -j "$jobs"
 mkdir -p native/dist
 stage="$(mktemp -d "$native_dir/dist/package.XXXXXX")"
 trap 'rm -rf "$stage"' EXIT
@@ -82,7 +88,10 @@ if [ "$platform" = macos ]; then
   codesign --force --sign - "$bin/freedigi-service"
   codesign --force --deep --sign - "$app"
   codesign --verify --deep --strict "$app"
+  # Keep a ready-to-open bundle; users do not need to extract the archive.
+  ditto "$app" "$native_dir/dist/FreeDigi.app"
   ditto -c -k --sequesterRsrc --keepParent "$app" "native/dist/FreeDigi-macos-$arch.zip"
+  printf '\nOpen it with: open native/dist/FreeDigi.app\n' 
 else
   strip --strip-unneeded "$bin/freedigi-service"
   cp desktop/assets/70-freedigi.rules native/assets/freedigi.png "$bin/"
