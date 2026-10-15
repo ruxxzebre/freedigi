@@ -50,7 +50,7 @@ def deb(root, work, output, arch):
     deps = result.stdout.strip().removeprefix('shlibs:Depends=')
     if not deps or '\n' in deps:
         raise RuntimeError('Could not determine ELF dependencies: ' + result.stdout)
-    deps += ', libgl1, libegl1, libxkbcommon0, libwayland-client0, libx11-6, libxcursor1, libxi6, libxrandr2'
+    deps += ', libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libx11-6, libxcursor1, libxi6, libxrandr2'
     size = sum(p.stat().st_size for p in root.rglob('*') if p.is_file() and not p.is_symlink()) // 1024
     (metadata / 'control').write_text(f'''Package: freedigi
 Version: {VERSION}
@@ -87,7 +87,7 @@ pkgdesc='Configure Flydigi controllers'
 arch=('x86_64')
 url='https://github.com/ruxxzebre/freedigi'
 license=('MIT')
-depends=('glibc' 'gcc-libs' 'libglvnd' 'libxkbcommon' 'wayland' 'libx11' 'libxcursor' 'libxi' 'libxrandr')
+depends=('glibc' 'gcc-libs' 'libglvnd' 'libxkbcommon' 'libxkbcommon-x11' 'wayland' 'libx11' 'libxcursor' 'libxi' 'libxrandr')
 options=('!strip' '!debug')
 source=('payload.tar.gz')
 sha256sums=('{digest}')

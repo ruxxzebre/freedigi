@@ -11,7 +11,7 @@ Configure your Flydigi Vader 5 Pro, inspect live inputs, and see exactly what th
 
 ## Status
 
-This is an early desktop preview. The Linux executable builds and the portable protocol and native state/safety tests pass. **The new Linux transport has not yet been tested against a physical controller.** The macOS transport adapts the original ControlLab IOKit session; a FreeDigi macOS build must be run and verified on a Mac.
+This is an early desktop preview. **The Linux transport and experimental Vader 4 support still need physical-controller validation.** The app includes dry runs, backups and readback checks for configuration changes.
 
 - Automatic controller discovery and live input monitoring on a controller diagram, including extra face and back buttons.
 - Settings are read in the background once a controller connects, so pages open with data; opening a page re-checks it and the view changes only if the controller reports something different.
