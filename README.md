@@ -48,7 +48,7 @@ cd freedigi
 ./native/scripts/build.sh
 ```
 
-Linux builds run on a GitHub Ubuntu runner. macOS builds are manually triggered on the owner's self-hosted Mac; [runner setup](docs/freedigi-mac-runner.md).
+See the [native build instructions](native/README.md) to build FreeDigi on Linux or macOS.
 
 ## Architecture
 
