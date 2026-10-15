@@ -1,0 +1,11 @@
+FreeDigi is based on ControlLab, the Swift controller application by dracinn.
+Original project: https://github.com/dracinn/ControlLab
+Copyright (c) 2026 dracinn. Licensed under the MIT License; see LICENSE.
+
+FreeDigi retains ControlLab's controller protocol, recovery logic and tests.
+Its new desktop interface uses Wails (MIT), React (MIT) and Lucide (ISC).
+Dependency licenses are available in their respective source packages.
+
+The Flydigi controller image is retained from the original application's
+resources. Flydigi product names, logos and controller imagery belong to
+their respective owners; their inclusion does not imply endorsement.

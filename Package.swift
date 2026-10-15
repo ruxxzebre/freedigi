@@ -1,18 +1,34 @@
 // swift-tools-version: 6.0
 import PackageDescription
+import Foundation
 
 #if os(Linux)
-let package = Package(
+let desktopServiceBuild = true
+#else
+let desktopServiceBuild = ProcessInfo.processInfo.environment["FREEDIGI_BUILD"] == "1"
+#endif
+
+let package: Package
+if desktopServiceBuild {
+package = Package(
     name: "ControlLab",
-    products: [.library(name: "ControllerProtocol", targets: ["ControllerProtocol"])],
+    platforms: [.macOS(.v13)],
+    products: [
+        .library(name: "ControllerProtocol", targets: ["ControllerProtocol"]),
+        .executable(name: "controllab-service", targets: ["ControlLabService"]),
+    ],
     targets: [
         .target(name: "ControllerProtocol"),
+        .target(name: "DesktopHID", dependencies: ["ControllerProtocol"],
+                linkerSettings: [.linkedFramework("IOKit", .when(platforms: [.macOS]))]),
+        .executableTarget(name: "ControlLabService", dependencies: ["DesktopHID", "ControllerProtocol"]),
+        .testTarget(name: "DesktopHIDTests", dependencies: ["DesktopHID"]),
         .testTarget(name: "ControllerProtocolTests", dependencies: ["ControllerProtocol"],
                     resources: [.copy("Fixtures")]),
     ]
 )
-#else
-let package = Package(
+} else {
+package = Package(
     name: "ControlLab",
     platforms: [.macOS(.v13)],
     products: [
@@ -112,4 +128,4 @@ let package = Package(
         ),
     ]
 )
-#endif
+}

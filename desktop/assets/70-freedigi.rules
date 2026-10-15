@@ -1,0 +1,4 @@
+# FreeDigi: configuration interfaces for Flydigi receiver and USB controller.
+# uaccess grants access to the active local desktop session, not all users.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="37d7", ATTRS{idProduct}=="2401", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="37d7", ATTRS{idProduct}=="2502", TAG+="uaccess"

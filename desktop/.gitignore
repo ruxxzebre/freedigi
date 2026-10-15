@@ -1,0 +1,15 @@
+/frontend/node_modules/
+/frontend/dist/
+/frontend/wailsjs/
+/frontend/test-results/
+/test-results/
+!/build/
+/build/*
+!/build/appicon.png
+!/build/darwin/
+/build/darwin/*
+!/build/darwin/Info.plist
+/bin/
+/dist/
+
+/frontend/package.json.md5

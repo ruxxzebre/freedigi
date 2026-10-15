@@ -1,0 +1,15 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "FreeDigi",
+  "outputfilename": "freedigi",
+  "frontend:install": "npm ci",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "info": {
+    "companyName": "FreeDigi contributors",
+    "productName": "FreeDigi",
+    "productVersion": "0.1.0",
+    "comments": "Based on the ControlLab Swift controller app by dracinn."
+  }
+}

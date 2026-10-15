@@ -1,0 +1,40 @@
+name: FreeDigi Linux
+on:
+  push:
+    branches: [main]
+    paths: ['desktop/**', 'Sources/ControllerProtocol/**', 'Sources/DesktopHID/**', 'Sources/ControlLabService/**', 'Tests/**', 'Package.swift', '.github/workflows/freedigi-linux.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache-dependency-path: desktop/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop/frontend/package-lock.json
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '6.0.3'
+      - name: Linux build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libcurl4-openssl-dev libxml2-dev
+      - name: Test and package FreeDigi
+        run: ./desktop/scripts/build.sh
+      - name: UI interaction tests
+        working-directory: desktop/frontend
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FreeDigi-linux-amd64
+          path: desktop/dist/FreeDigi-linux-amd64.tar.gz
+          if-no-files-found: error
