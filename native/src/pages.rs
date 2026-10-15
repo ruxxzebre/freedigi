@@ -80,7 +80,7 @@ impl App {
                     "On Linux, install the included udev rule, then unplug and replug the receiver.",
                 );
                 if cfg!(target_os = "linux") {
-                    let command = "sudo cp native/packaging/99-freedigi.rules /etc/udev/rules.d/ && sudo udevadm control --reload && sudo udevadm trigger";
+                    let command = "sudo cp native/assets/70-freedigi.rules /etc/udev/rules.d/ && sudo udevadm control --reload && sudo udevadm trigger";
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(command).monospace().size(Type::SMALL));
                         if ui::small_button(ui, Kind::Secondary, "Copy").clicked() {
@@ -93,7 +93,7 @@ impl App {
                     ui,
                     Mood::Resting,
                     "No controller yet",
-                    "Plug in your Vader 5 Pro or its USB receiver — we check every second.",
+                    "Connect a Vader 5 Pro, or a Vader 4 Pro in DInput mode (PC switch, hold FN+A; blue LED). Vader 4 support is experimental and hardware untested.",
                 );
             }
         });

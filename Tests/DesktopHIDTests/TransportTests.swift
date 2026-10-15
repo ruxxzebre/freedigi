@@ -53,3 +53,54 @@ final class TransportTests: XCTestCase {
         XCTAssertThrowsError(try value.plan(color: "#123456", brightness: 101, off: false))
     }
 }
+
+extension TransportTests {
+    func testClassicNumberedDescriptorDoesNotDuplicateReportID() throws {
+        let descriptor: [UInt8] = [0x06, 0xa0, 0xff, 0x85, 5, 0x75, 8, 0x95, 31, 0x91, 2, 0x85, 4, 0x81, 2]
+        let layout = try HIDLayout.parse(descriptor, isClassic: true)
+        let command = ClassicControllerProtocol.command(0xec)
+        let packet = try layout.output(command)
+        XCTAssertEqual(packet.count, 32)
+        XCTAssertEqual(Array(packet.prefix(3)), [5, 0xec, 0])
+        XCTAssertEqual(layout.input([4, 0xfe, 0]), [4, 0xfe, 0])
+        XCTAssertNil(layout.input([5, 0xfe, 0]))
+        XCTAssertThrowsError(try layout.output(ControllerCommand.frame(1)))
+        XCTAssertThrowsError(try HIDLayout.parse(numbered, isClassic: true))
+        let short: [UInt8] = [0x06, 0xa0, 0xff, 0x85, 5, 0x75, 8, 0x95, 13, 0x91, 2, 0x85, 4, 0x81, 2]
+        XCTAssertEqual(try HIDLayout.parse(short, isClassic: true).output(command).count, 14)
+    }
+    func testClassicInputsExtraButtonsAxesAndTriggers() throws {
+        var report = [UInt8](repeating: 0, count: 32)
+        report[0] = 4; report[1] = 0xfe
+        for index in [17, 19, 21, 22] { report[index] = 127 }
+        let neutral = try XCTUnwrap(InputState.parse(report))
+        XCTAssertTrue(neutral.buttons.isEmpty); XCTAssertEqual(neutral.leftX, 0); XCTAssertEqual(neutral.leftY, 0)
+        report[7] = 0x3f; report[9] = 0x31; report[10] = 0xff; report[8] = 8
+        report[17] = 255; report[19] = 0; report[21] = 0; report[22] = 255; report[23] = 255; report[24] = 128
+        let state = try XCTUnwrap(InputState.parse(report))
+        XCTAssertEqual(state.buttons, [0, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 32])
+        XCTAssertEqual(state.leftX, 1); XCTAssertEqual(state.leftY, 1)
+        XCTAssertEqual(state.rightX, -1); XCTAssertEqual(state.rightY, -1)
+        XCTAssertEqual(state.leftTrigger, 1); XCTAssertEqual(state.rightTrigger, 128.0/255)
+        XCTAssertNil(InputState.parse(Array(report.prefix(31))))
+    }
+    func testClassicLightingPercentColorsOpaqueBytesAndSlot() throws {
+        let identity = try JSONDecoder().decode(ControllerIdentity.self, from: Data(#"{"deviceID":85,"connection":1,"address":[1,2,3,4]}"#.utf8))
+        var bytes = [UInt8](repeating: 42, count: 500)
+        bytes[0] = 0; bytes[1] = 2; bytes[7] = 2; bytes[6] = 60; bytes[8] = 5
+        let value = LightingSnapshot(identity: identity, bytes: bytes, slot: 2)
+        let reports = try value.plan(color: "#ff8000", brightness: 70, off: false)
+        XCTAssertEqual(Array(reports[0].prefix(4)), [5, 0xe7, 2, 50])
+        let edited = reports.dropFirst().flatMap { Array($0[2..<12]) }
+        XCTAssertEqual(Array(edited[20..<23]), [100, 50, 0])
+        XCTAssertEqual(edited[6], 70); XCTAssertEqual(edited[8], 5)
+        XCTAssertEqual(Array(edited[9..<20]), Array(bytes[9..<20]))
+        XCTAssertEqual(Array(edited[80..<500]), Array(bytes[80..<500]))
+        let off = try value.plan(color: "#ff8000", brightness: 70, off: true).dropFirst().flatMap { Array($0[2..<12]) }
+        XCTAssertEqual(off[6], 0); XCTAssertEqual(off[8], 6)
+        XCTAssertEqual(Array(off[20..<500]), Array(bytes[20..<500]))
+        XCTAssertThrowsError(try LightingSnapshot(identity: identity, bytes: bytes).plan(color: "#ff8000", brightness: 70, off: false))
+        bytes[1] = 3
+        XCTAssertThrowsError(try LightingSnapshot(identity: identity, bytes: bytes, slot: 0).plan(color: "#ff8000", brightness: 70, off: false))
+    }
+}

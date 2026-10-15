@@ -1,7 +1,7 @@
 # FreeDigi
 
 A desktop controller app for **Linux and macOS**, built with **Rust + egui** (Metal via wgpu on macOS, OpenGL on Linux).
-Configure your Flydigi Vader 5 Pro, inspect live inputs, and see exactly what the app is doing.
+Configure your Flydigi Vader 5 Pro, inspect live inputs, and see exactly what the app is doing. Experimental Vader 4 Pro support is available in DInput mode.
 
 **Based on [ControlLab](https://github.com/dracinn/ControlLab), the original Swift controller app by dracinn.** FreeDigi reuses its controller protocol implementation and tests. The original MIT copyright and license are preserved, and the app includes an About credit. See [NOTICE](NOTICE) and [LICENSE](LICENSE).
 
@@ -27,6 +27,14 @@ This is an early desktop preview. The Linux executable builds and the portable p
 Windows has [minimal groundwork](docs/freedigi-windows.md) only; no Windows controller backend or release is available yet.
 
 The original SwiftUI ControlLab app and the earlier Wails preview have been removed; the ControlLab protocol core, tests and CLI remain ([ControlLab documentation](CONTROLLAB.md)). FreeDigi is not yet feature-complete relative to the original app, whose UI is available upstream.
+
+## Experimental Vader 4 Pro support
+
+Vader 4 Pro uses a separate classic protocol implementation. Set the rear switch to **PC**, then hold **FN+A** until the LED is blue (DInput). Use USB for the first test. The app discovers the `04b4:2412` configuration interface and checks the controller model ID (85, 91 or 105); the USB IDs alone also identify other models.
+
+Supported experimentally: live buttons including C/Z and M1–M4, sticks/triggers, main firmware version, profile mappings, temporary apply, explicit persistent save, and per-profile solid/off/brightness lighting. Turbo and automatic calibration are reported unsupported. Only complete v3.0 (790-byte) and v3.1 (840-byte) profiles and v2.0 (500-byte) lighting are accepted; unknown layouts fail closed. Classic writes require a fresh matching snapshot, indexed acknowledgements and complete readback, and are never automatically replayed. Profile and classic lighting backups are stored under `$XDG_STATE_HOME/freedigi/backups` (default `~/.local/state/freedigi/backups`). Lighting apply is temporary; persistent saving is available for profiles.
+
+**Vader 4 hardware has not been tested with this implementation.** Protocol sources include SDL's Flydigi input support and shared-classic protocol observations mainly made on Apex 4; controller-specific validation remains necessary. Follow the [Vader 4 hardware test checklist](docs/vader4-testing.md), starting with live reads and dry runs. This support does not cover XInput, Bluetooth configuration or firmware flashing.
 
 ## Download and build
 

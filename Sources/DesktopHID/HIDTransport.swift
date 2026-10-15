@@ -8,8 +8,9 @@ public struct HIDLayout: Equatable, Sendable {
     public let outputID: UInt8
     public let outputBytes: Int
     public let inputIDs: Set<UInt8>
+    public let isClassic: Bool
 
-    public static func parse(_ bytes: [UInt8]) throws -> HIDLayout {
+    public static func parse(_ bytes: [UInt8], isClassic: Bool = false) throws -> HIDLayout {
         var page = 0, size = 0, count = 0, id: UInt8 = 0, index = 0
         var outputs: [UInt8: Int] = [:], inputs: Set<UInt8> = []
         var stack: [(Int, Int, Int, UInt8)] = []
@@ -39,20 +40,27 @@ public struct HIDLayout: Equatable, Sendable {
             default: break
             }
         }
-        let matches = outputs.filter { (248...512).contains($0.value) && $0.value.isMultiple(of: 8) }
-        guard matches.count == 1, let output = matches.first, !inputs.isEmpty else {
+        let matches = outputs.filter { (isClassic ? (104...512) : (248...512)).contains($0.value) && $0.value.isMultiple(of: 8) && (!isClassic || $0.key == 5) }
+        guard matches.count == 1, let output = matches.first, !inputs.isEmpty, !isClassic || inputs.contains(4) else {
             throw ControllerProtocolError.invalid("No unambiguous Flydigi configuration collection.")
         }
-        return .init(outputID: output.key, outputBytes: output.value / 8, inputIDs: inputs)
+        return .init(outputID: output.key, outputBytes: output.value / 8, inputIDs: inputs, isClassic: isClassic)
     }
 
     public func output(_ report: [UInt8]) throws -> [UInt8] {
+        if isClassic {
+            guard report.first == 5, report.count <= outputBytes + 1 else {
+                throw ControllerProtocolError.invalid("Invalid classic HID output framing.")
+            }
+            return report + Array(repeating: 0, count: outputBytes + 1 - report.count)
+        }
         guard report.count <= outputBytes || report.dropFirst(outputBytes).allSatisfy({ $0 == 0 }) else {
             throw ControllerProtocolError.invalid("Command exceeds HID output size.")
         }
         return [outputID] + Array(report.prefix(outputBytes)) + Array(repeating: 0, count: max(0, outputBytes - report.count))
     }
     public func input(_ report: [UInt8]) -> [UInt8]? {
+        if isClassic { return report.first == 4 ? report : nil }
         if inputIDs.contains(0), report.starts(with: [0x5a, 0xa5]) { return report }
         if let id = report.first, id != 0, inputIDs.contains(id), report.dropFirst().starts(with: [0x5a, 0xa5]) {
             return Array(report.dropFirst())
@@ -67,6 +75,7 @@ public struct HIDDevice: Codable, Sendable {
     public let name: String
     public let product: String
     public let accessible: Bool
+    public let isClassic: Bool
 
     public static func enumerate(root: String = "/sys/class/hidraw") -> [HIDDevice] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []
@@ -75,13 +84,14 @@ public struct HIDDevice: Codable, Sendable {
             guard let text = try? String(contentsOfFile: base + "/uevent", encoding: .utf8),
                   let row = text.split(separator: "\n").first(where: { $0.hasPrefix("HID_ID=") }) else { return nil }
             let fields = row.dropFirst(7).split(separator: ":")
-            guard fields.count == 3, UInt32(fields[1], radix: 16) == 0x37d7,
-                  let product = UInt32(fields[2], radix: 16), [0x2401, 0x2502].contains(product),
+            guard fields.count == 3, let vendor = UInt32(fields[1], radix: 16),
+                  let product = UInt32(fields[2], radix: 16),
+                  (vendor == 0x37d7 && [0x2401, 0x2502].contains(product)) || (vendor == 0x04b4 && product == 0x2412),
                   let descriptor = try? Data(contentsOf: URL(fileURLWithPath: base + "/report_descriptor")),
-                  (try? HIDLayout.parse(Array(descriptor))) != nil else { return nil }
+                  (try? HIDLayout.parse(Array(descriptor), isClassic: vendor == 0x04b4)) != nil else { return nil }
             let label = text.split(separator: "\n").first(where: { $0.hasPrefix("HID_NAME=") }).map { String($0.dropFirst(9)) } ?? "Flydigi controller"
             let path = "/dev/\(name)"
-            return .init(path: path, name: label, product: String(format: "%04x", product), accessible: access(path, R_OK | W_OK) == 0)
+            return .init(path: path, name: label, product: String(format: "%04x", product), accessible: access(path, R_OK | W_OK) == 0, isClassic: vendor == 0x04b4)
         }
     }
 }
@@ -89,12 +99,13 @@ public struct HIDDevice: Codable, Sendable {
 public final class HIDChannel: ControllerChannel {
     private let fd: Int32
     private let layout: HIDLayout
+    public var isClassic: Bool { layout.isClassic }
     public init(path: String) throws {
-        guard HIDDevice.enumerate().contains(where: { $0.path == path }) else {
+        guard let selected = HIDDevice.enumerate().first(where: { $0.path == path }) else {
             throw ControllerProtocolError.invalid("Selected controller is no longer present. Refresh devices.")
         }
         let descriptor = try Data(contentsOf: URL(fileURLWithPath: "/sys/class/hidraw/\(URL(fileURLWithPath: path).lastPathComponent)/device/report_descriptor"))
-        layout = try HIDLayout.parse(Array(descriptor))
+        layout = try HIDLayout.parse(Array(descriptor), isClassic: selected.isClassic)
         fd = Glibc.open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC)
         guard fd >= 0 else { throw ControllerProtocolError.invalid("Cannot open \(path): \(String(cString: strerror(errno))). Install the supplied udev rule, then reconnect the receiver.") }
         // Cooperating ControlLab processes cannot interleave profile transactions.

@@ -2,7 +2,17 @@
 
 Validated on a Linux amd64 Ubuntu 24.04 host with Swift 6.0.3, Go 1.26.2, Node 25.9.0, Wails 2.15.0 and WebKitGTK 4.1 (2.52.6).
 
-## Completed checks
+## Experimental Vader 4 changes (2026-10-15)
+
+On macOS, `FREEDIGI_BUILD=1 swift test` passes the portable protocol and desktop transport suites, including classic identity rejection, exact v3.0/v3.1 blob assembly, reordered/duplicate/conflicting/missing parcels, indexed ACK matching, stale snapshot rejection, temporary versus persistent sequencing, little-endian version save, full readback, no automatic write replay, numbered HID framing, live C/Z/M1–M4 inputs and percent-RGB lighting preservation. These use synthetic reports and mock channels, not captured Vader 4 sessions.
+
+The real service dry-run integration checks cover both classic profile layouts and lighting, plus foreign-model and unsupported Turbo/calibration rejection. The Linux descriptor logic is exercised through pure framing tests on macOS; Linux hidraw discovery and I/O still require an actual Linux hardware run.
+
+**No physical Vader 4 has been tested.** The shared classic protocol documentation predominantly concerns Apex 4; DInput slot reply variants, write headers, LED off behavior and save persistence need the [friend's hardware checklist](vader4-testing.md). Current support accepts only exact 790-byte v3.0/840-byte v3.1 profiles and 500-byte v2.0 lighting. It rejects unknown versions and never silently truncates blobs. A 40 ms bounded receive window checks trailing parcels; real device timing remains to be measured.
+
+Reference protocol facts: [SDL Flydigi driver](https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/SDL_hidapi_flydigi.c), [classic protocol observations](https://github.com/uiltonlopes/flydigi-space-station-mac/blob/main/docs/protocol.md), and [Space Station SDK analysis](https://github.com/uiltonlopes/flydigi-space-station-mac/blob/main/docs/spacestation4-analysis.md). The implementation was written independently; hardware validation is not implied by these sources.
+
+## Completed checks (earlier Wails preview)
 
 - 75 Swift tests: the 70 existing portable protocol tests plus five tests for HID descriptor/report framing, independent input buttons and lighting plans.
 - Eight Go service-boundary tests under the race detector: authoritative dry-run state, cached snapshot ownership, invalidation after ambiguous writes, serialization, device-switch isolation, missing-helper errors, monitor-failure state, platform policy and bounded diagnostics.

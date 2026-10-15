@@ -70,6 +70,12 @@ edited. Macro/combo editors, firmware installation, Bluetooth configuration and
 virtual gamepad output are not included. Hardware I/O still needs validation on
 an attached controller. Windows is explicit unsupported-transport groundwork.
 
+## Experimental Vader 4 Pro
+
+Connect in DInput mode: PC switch, hold FN+A, blue LED. Discovery includes the shared classic `04b4:2412` vendor interface, but the helper accepts only Vader 4 identities 85/91/105. Linux permissions use `native/assets/70-freedigi.rules`; reconnect after installing it. macOS uses the FFA0 IOKit collection and numbered reports 4/5.
+
+Live inputs, main firmware version, mappings (temporary apply or explicit save), and temporary per-profile solid/off/brightness lighting are implemented. Turbo and automatic calibration remain unsupported. Classic writes use a separate protocol client, backup/conflict/readback checks and indexed acknowledgements; they are not replayed after a timeout. Unknown profile/lighting formats are rejected without truncation. No Vader 4 hardware has been exercised: use the [hardware test checklist](../docs/vader4-testing.md).
+
 ## Build speed
 
 The package script builds **release only**, including its tests. Release has

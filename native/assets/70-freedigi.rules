@@ -2,3 +2,6 @@
 # uaccess grants access to the active local desktop session, not all users.
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="37d7", ATTRS{idProduct}=="2401", TAG+="uaccess"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="37d7", ATTRS{idProduct}=="2502", TAG+="uaccess"
+
+# Shared classic USB identity; service verifies Vader 4 model before writes.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="04b4", ATTRS{idProduct}=="2412", TAG+="uaccess"
