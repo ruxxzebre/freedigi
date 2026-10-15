@@ -1,24 +1,52 @@
 name: FreeDigi macOS
 on:
+  push:
+    branches: [main]
+    paths: ['native/**', 'Sources/**', 'Tests/**', 'Package.swift', 'rust-toolchain.toml', '.github/workflows/freedigi-macos.yml']
+  pull_request:
+    paths: ['native/**', 'Sources/**', 'Tests/**', 'Package.swift', 'rust-toolchain.toml', '.github/workflows/freedigi-macos.yml']
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   build:
-    if: github.repository == 'ruxxzebre/freedigi' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, macOS, ARM64]
-    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: amd64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '13.0'
+      FREEDIGI_BUILD_JOBS: '3'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: '1.97.0'
-      - name: Verify the laptop's Xcode toolchain
-        run: xcrun swift --version
-      - name: Test, build and ad-hoc sign native FreeDigi
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/target
+          key: native-macos-${{ matrix.arch }}-${{ hashFiles('native/Cargo.lock', 'native/Cargo.toml', 'rust-toolchain.toml') }}
+      - name: Test and package FreeDigi
         run: ./native/scripts/build.sh
+      - name: Test legacy protocol integration
+        run: swift test --scratch-path .build-legacy -j 3
       - uses: actions/upload-artifact@v4
         with:
-          name: FreeDigi-macos
-          path: native/dist/FreeDigi-macos-*.zip
+          name: FreeDigi-macos-${{ matrix.arch }}
+          path: |
+            native/dist/FreeDigi-macos-*.zip
+            native/dist/FreeDigi-macos-*.dmg
+          retention-days: 1
           if-no-files-found: error

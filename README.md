@@ -1,7 +1,7 @@
 # FreeDigi
 
 A desktop controller app for **Linux and macOS**, built with **Rust + egui** (Metal via wgpu on macOS, OpenGL on Linux).
-Configure your Flydigi Vader 5 Pro, inspect live inputs, and see exactly what the app is doing.
+Configure your Flydigi Vader 5 Pro, inspect live inputs, and see exactly what the app is doing. Experimental Vader 4 Pro support is available in DInput mode.
 
 **Based on [ControlLab](https://github.com/dracinn/ControlLab), the original Swift controller app by dracinn.** FreeDigi reuses its controller protocol implementation and tests. The original MIT copyright and license are preserved, and the app includes an About credit. See [NOTICE](NOTICE) and [LICENSE](LICENSE).
 
@@ -11,7 +11,7 @@ Configure your Flydigi Vader 5 Pro, inspect live inputs, and see exactly what th
 
 ## Status
 
-This is an early desktop preview. The Linux executable builds and the portable protocol and native state/safety tests pass. **The new Linux transport has not yet been tested against a physical controller.** The macOS transport adapts the original ControlLab IOKit session; a FreeDigi macOS build must be run and verified on a Mac.
+This is an early desktop preview. **The Linux transport and experimental Vader 4 support still need physical-controller validation.** The app includes dry runs, backups and readback checks for configuration changes.
 
 - Automatic controller discovery and live input monitoring on a controller diagram, including extra face and back buttons.
 - Settings are read in the background once a controller connects, so pages open with data; opening a page re-checks it and the view changes only if the controller reports something different.
@@ -28,11 +28,31 @@ Windows has [minimal groundwork](docs/freedigi-windows.md) only; no Windows cont
 
 The original SwiftUI ControlLab app and the earlier Wails preview have been removed; the ControlLab protocol core, tests and CLI remain ([ControlLab documentation](CONTROLLAB.md)). FreeDigi is not yet feature-complete relative to the original app, whose UI is available upstream.
 
-## Download and build
+## Experimental Vader 4 Pro support
 
-The `v0.1.0-preview` release is the older Wails build. The native egui interface is in `main`; native packages are produced by the FreeDigi workflows.
+Vader 4 Pro uses a separate classic protocol implementation. Set the rear switch to **PC**, then hold **FN+A** until the LED is blue (DInput). Use USB for the first test. The app discovers the `04b4:2412` configuration interface and checks the controller model ID (85, 91 or 105); the USB IDs alone also identify other models.
 
-See [Releases](https://github.com/ruxxzebre/freedigi/releases) for available builds, and [native/README.md](native/README.md) for installation, dependencies and local builds.
+Supported experimentally: live buttons including C/Z and M1–M4, sticks/triggers, main firmware version, profile mappings, temporary apply, explicit persistent save, and per-profile solid/off/brightness lighting. Turbo and automatic calibration are reported unsupported. Only complete v3.0 (790-byte) and v3.1 (840-byte) profiles and v2.0 (500-byte) lighting are accepted; unknown layouts fail closed. Classic writes require a fresh matching snapshot, indexed acknowledgements and complete readback, and are never automatically replayed. Profile and classic lighting backups are stored under `$XDG_STATE_HOME/freedigi/backups` (default `~/.local/state/freedigi/backups`). Lighting apply is temporary; persistent saving is available for profiles.
+
+**Vader 4 hardware has not been tested with this implementation.** Protocol sources include SDL's Flydigi input support and shared-classic protocol observations mainly made on Apex 4; controller-specific validation remains necessary. Follow the [Vader 4 hardware test checklist](docs/vader4-testing.md), starting with live reads and dry runs. This support does not cover XInput, Bluetooth configuration or firmware flashing.
+
+## Download and install
+
+Download FreeDigi from [Releases](https://github.com/ruxxzebre/freedigi/releases). Choose the package for your computer:
+
+| System | Package | Install |
+| --- | --- | --- |
+| Debian 13+ / Ubuntu 24.04+ | `.deb` (`amd64` or `arm64`) | `sudo apt install ./freedigi_*.deb` |
+| Arch Linux | `x86_64.pkg.tar.zst` | `sudo pacman -U ./freedigi-*.pkg.tar.zst` |
+| macOS, Apple silicon | `macos-arm64.dmg` | Drag FreeDigi into Applications |
+| macOS, Intel | `macos-amd64.dmg` | Drag FreeDigi into Applications |
+| Other Linux | `.tar.gz` (`amd64` or `arm64`) | Extract and run `FreeDigi/freedigi` |
+
+Debian and Arch packages include controller permissions and an applications-menu entry. Reconnect your controller after installation. Mac builds are ad-hoc signed and may require allowing the first launch in Privacy & Security. See the [installation guide](native/packaging/README.md) for details.
+
+The older `v0.1.0-preview` release uses the previous Wails interface.
+
+## Build from source
 
 ```sh
 git clone https://github.com/ruxxzebre/freedigi.git
@@ -40,7 +60,7 @@ cd freedigi
 ./native/scripts/build.sh
 ```
 
-Linux builds run on a GitHub Ubuntu runner. macOS builds are manually triggered on the owner's self-hosted Mac; [runner setup](docs/freedigi-mac-runner.md).
+See the [native build instructions](native/README.md) to build FreeDigi on Linux or macOS.
 
 ## Architecture
 

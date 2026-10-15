@@ -3,6 +3,8 @@
 Rust + egui interface for Linux and macOS, using the existing ControlLab-derived
 Swift controller service.
 
+For downloadable packages, see the [installation guide](packaging/README.md).
+
 ## Run
 
 With Rust and Swift 6 installed, from the repository root:
@@ -14,7 +16,7 @@ FREEDIGI_SERVICE="$(pwd)/.build/debug/controllab-service" cargo run --locked --m
 
 Or use `nix develop` for the pinned Rust compiler and Linux graphics libraries.
 The flake uses the same nixpkgs revision as Chaiky/Core. `Cargo.lock` pins Rust
-crates. Swift 6 is separate: Linux builds use Swift 6.0.3; macOS uses the laptop's
+crates. Swift 6 is separate: Linux builds use Swift 6.0.3; macOS uses the
 Xcode Swift compiler and SDK. The pinned nixpkgs Swift 5.10 is too old. This is
 not a claim of a fully Nix-built Apple SDK or Swift service.
 
@@ -70,6 +72,12 @@ edited. Macro/combo editors, firmware installation, Bluetooth configuration and
 virtual gamepad output are not included. Hardware I/O still needs validation on
 an attached controller. Windows is explicit unsupported-transport groundwork.
 
+## Experimental Vader 4 Pro
+
+Connect in DInput mode: PC switch, hold FN+A, blue LED. Discovery includes the shared classic `04b4:2412` vendor interface, but the helper accepts only Vader 4 identities 85/91/105. Linux permissions use `native/assets/70-freedigi.rules`; reconnect after installing it. macOS uses the FFA0 IOKit collection and numbered reports 4/5.
+
+Live inputs, main firmware version, mappings (temporary apply or explicit save), and temporary per-profile solid/off/brightness lighting are implemented. Turbo and automatic calibration remain unsupported. Classic writes use a separate protocol client, backup/conflict/readback checks and indexed acknowledgements; they are not replayed after a timeout. Unknown profile/lighting formats are rejected without truncation. No Vader 4 hardware has been exercised: use the [hardware test checklist](../docs/vader4-testing.md).
+
 ## Build speed
 
 The package script builds **release only**, including its tests. Release has
@@ -82,7 +90,16 @@ The script uses at most eight compiler jobs by default. Set
 `FREEDIGI_BUILD_JOBS=4` to reduce peak memory on a smaller laptop, or increase it
 explicitly on a larger machine. The first build downloads/compiles dependencies;
 later builds reuse them. On Mac the ready-to-open result is
-`native/dist/FreeDigi.app`, alongside the distributable zip.
+`native/dist/FreeDigi.app`, alongside the distributable zip and disk image.
+
+On Debian/Ubuntu, install `dpkg-dev` and create a `.deb` from the portable build:
+
+```sh
+python3 native/scripts/package-linux.py --archive native/dist/FreeDigi-linux-amd64.tar.gz --format deb
+```
+
+Use `linux-arm64.tar.gz` on ARM64. On Arch x86_64, the same command with
+`--format arch` uses `makepkg` to create a `.pkg.tar.zst`; run it as a normal user.
 
 ## Interface and memory diagnostics
 

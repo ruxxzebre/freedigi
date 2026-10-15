@@ -62,8 +62,9 @@ public struct ControllerProfile: Equatable, Sendable {
     public private(set) var bytes: [UInt8]
 
     public init(bytes: [UInt8]) throws {
-        guard bytes.count >= 840, bytes.count <= 5100, bytes.count.isMultiple(of: 20),
-              bytes[1] == 3, bytes[0] <= 2 else {
+        guard (bytes.count == 790 && bytes[0] == 0 && bytes[1] == 3) ||
+              (bytes.count >= 840 && bytes.count <= 5100 && bytes.count.isMultiple(of: 20) &&
+               bytes[1] == 3 && bytes[0] <= 2) else {
             throw ControllerProtocolError.invalid("Unsupported or truncated controller profile (expected protocol 3.0–3.2).")
         }
         self.bytes = bytes
@@ -120,7 +121,8 @@ public struct ControllerProfile: Equatable, Sendable {
     }
     /// Shared validation and packet plan for preview and real profile writes.
     public func writeReports(replacing original: ControllerProfile, slot: UInt8, persist: Bool) throws -> [[UInt8]] {
-        guard slot < 4, bytes.count == original.bytes.count,
+        guard bytes.count >= 840, bytes.count.isMultiple(of: 20),
+              slot < 4, bytes.count == original.bytes.count,
               bytes.prefix(3) == original.bytes.prefix(3), dataVersion == original.dataVersion else {
             throw ControllerProtocolError.invalid("Profile format, slot or version changed.")
         }
@@ -156,7 +158,10 @@ public struct ControllerProfileSnapshot: Codable, Equatable, Sendable {
     }
 
     public func profile() throws -> ControllerProfile {
-        try identity.requireVader5()
+        if identity.isVader4 {
+            try identity.requireVader4()
+            try ClassicControllerProtocol.validateProfile(Array(data))
+        } else { try identity.requireVader5() }
         guard slot < 4 else { throw ControllerProtocolError.invalid("Unsupported profile slot.") }
         return try ControllerProfile(bytes: Array(data))
     }

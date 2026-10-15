@@ -2,33 +2,97 @@ name: FreeDigi Linux
 on:
   push:
     branches: [main]
-    paths: ['native/**', 'flake.*', 'rust-toolchain.toml', 'Sources/ControllerProtocol/**', 'Sources/DesktopHID/**', 'Sources/ControlLabService/**', 'Sources/Vader5Core/**', 'Tests/**', 'Package.swift', '.github/workflows/freedigi-linux.yml']
+    paths: ['native/**', 'flake.*', 'rust-toolchain.toml', 'Sources/**', 'Tests/**', 'Package.swift', '.github/workflows/freedigi-linux.yml']
+  pull_request:
+    paths: ['native/**', 'flake.*', 'rust-toolchain.toml', 'Sources/**', 'Tests/**', 'Package.swift', '.github/workflows/freedigi-linux.yml']
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
       - uses: swift-actions/setup-swift@v2
+        if: matrix.arch == 'amd64'
         with:
           swift-version: '6.0.3'
-      - name: Linux runtime and helper dependencies
-        run: sudo apt-get update && sudo apt-get install -y libgl1 libxkbcommon0 libwayland-client0 libx11-6 libxcursor1 libxi6 libxrandr2 libcurl4-openssl-dev libxml2-dev
+      - name: Install Swift for ARM64
+        if: matrix.arch == 'arm64'
+        run: |
+          swift_url=https://download.swift.org/swift-6.0.3-release/ubuntu2404-aarch64/swift-6.0.3-RELEASE/swift-6.0.3-RELEASE-ubuntu24.04-aarch64.tar.gz
+          curl -fL --retry 3 "$swift_url" -o "$RUNNER_TEMP/swift.tar.gz"
+          curl -fL --retry 3 "$swift_url.sig" -o "$RUNNER_TEMP/swift.tar.gz.sig"
+          curl -fL --retry 3 https://www.swift.org/keys/all-keys.asc -o "$RUNNER_TEMP/swift-keys.asc"
+          mkdir -m 700 "$RUNNER_TEMP/swift-gnupg"
+          gpg --homedir "$RUNNER_TEMP/swift-gnupg" --batch --import "$RUNNER_TEMP/swift-keys.asc"
+          gpg --homedir "$RUNNER_TEMP/swift-gnupg" --batch --verify "$RUNNER_TEMP/swift.tar.gz.sig" "$RUNNER_TEMP/swift.tar.gz"
+          mkdir "$RUNNER_TEMP/swift"
+          tar -xzf "$RUNNER_TEMP/swift.tar.gz" --strip-components=1 -C "$RUNNER_TEMP/swift"
+          echo "$RUNNER_TEMP/swift/usr/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/swift/usr/bin/swift" --version
+      - name: Build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1 libxkbcommon0 libwayland-client0 libx11-6 libxcursor1 libxi6 libxrandr2 libcurl4-openssl-dev libxml2-dev dpkg-dev desktop-file-utils
       - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             native/target
-          key: native-linux-${{ hashFiles('native/Cargo.lock', 'native/Cargo.toml', 'flake.lock', 'rust-toolchain.toml') }}
-      - name: Test and package native FreeDigi
+          key: native-linux-${{ matrix.arch }}-${{ hashFiles('native/Cargo.lock', 'native/Cargo.toml', 'flake.lock', 'rust-toolchain.toml') }}
+      - name: Test and package FreeDigi
         run: nix develop --command ./native/scripts/build.sh
+      - name: Build Debian package
+        run: python3 native/scripts/package-linux.py --archive native/dist/FreeDigi-linux-${{ matrix.arch }}.tar.gz --format deb
+      - name: Verify Debian and Ubuntu installation
+        run: |
+          for distro in debian:trixie-slim ubuntu:24.04; do
+            docker run --rm -v "$PWD:/repo:ro" "$distro" bash -c '
+              set -e
+              apt-get update
+              apt-get install -y /repo/native/dist/*.deb python3 desktop-file-utils xvfb xauth libgl1-mesa-dri
+              bash /repo/native/scripts/check-linux-install.sh /repo
+              apt-get purge -y freedigi
+              test ! -e /usr/bin/freedigi
+              test ! -e /usr/lib/freedigi/freedigi-service
+              test ! -e /usr/lib/udev/rules.d/70-freedigi.rules
+            '
+          done
+      - name: Build and verify Arch package
+        if: matrix.arch == 'amd64'
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" -v "$PWD/native/dist:/out" archlinux:base-devel bash -c '
+            set -e
+            pacman -Syu --noconfirm python desktop-file-utils xorg-server-xvfb xorg-xauth mesa
+            useradd -m builder
+            chmod a+w /out
+            su builder -c "python /repo/native/scripts/package-linux.py --archive /out/FreeDigi-linux-amd64.tar.gz --format arch --output /out"
+            pacman -U --noconfirm /out/*.pkg.tar.zst
+            bash /repo/native/scripts/check-linux-install.sh /repo
+            pacman -R --noconfirm freedigi
+            test ! -e /usr/bin/freedigi
+            test ! -e /usr/lib/freedigi/freedigi-service
+            test ! -e /usr/lib/udev/rules.d/70-freedigi.rules
+          '
       - uses: actions/upload-artifact@v4
         with:
-          name: FreeDigi-linux-amd64
-          path: native/dist/FreeDigi-linux-amd64.tar.gz
+          name: FreeDigi-linux-${{ matrix.arch }}
+          path: |
+            native/dist/FreeDigi-linux-*.tar.gz
+            native/dist/*.deb
+            native/dist/*.pkg.tar.zst
+          retention-days: 1
           if-no-files-found: error

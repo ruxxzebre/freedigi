@@ -11,6 +11,7 @@ public enum ControllerMonitorStartup {
     public static func handshake<Channel: ControllerChannel>(
         cancelled: () -> Bool = { false },
         waitBeforeRetry: () -> Void = { Thread.sleep(forTimeInterval: 0.2) },
+        identify: (Channel) throws -> ControllerIdentity = { try ControllerProfileClient(channel: $0, operation: "starting input monitoring").identity() },
         open: () throws -> Channel
     ) throws -> (channel: Channel, identity: ControllerIdentity)? {
         let start = ProcessInfo.processInfo.systemUptime
@@ -18,7 +19,7 @@ public enum ControllerMonitorStartup {
             if cancelled() { return nil }
             do {
                 let channel = try open()
-                let identity = try ControllerProfileClient(channel: channel, operation: "starting input monitoring").identity()
+                let identity = try identify(channel)
                 if number > 1 {
                     ControllerDiagnostics.shared.record("Monitor handshake", stage: "completed",
                         message: "Identity answered on attempt \(number)/\(maximumAttempts).",
