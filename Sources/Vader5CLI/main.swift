@@ -222,7 +222,7 @@ if let optionIndex = CommandLine.arguments.firstIndex(of: "--dock-mode") {
                 .deletingLastPathComponent()
             let url = repository
                 .appendingPathComponent(
-                    "Sources/Vader5GUI/Resources/FlydigiDockDefaults")
+                    "Resources/FlydigiDockDefaults")
                 .appendingPathComponent("default_mapping_\(deviceType).dat")
             configuration = try FlydigiDockFactoryLighting.decode(
                 Data(contentsOf: url))

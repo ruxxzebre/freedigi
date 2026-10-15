@@ -23,4 +23,4 @@ for package in sorted(metadata["packages"], key=lambda p: (p["name"], p["version
     for path in files:
         print(f"--- {path.name} ---\n{path.read_text(errors='replace')}")
 print("\n=== Swift runtime ===\n")
-print((native.parent / "desktop/assets/swift-runtime-license.txt").read_text())
+print((native / "assets/swift-runtime-license.txt").read_text())

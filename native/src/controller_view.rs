@@ -1,153 +1,140 @@
-//! A small vector controller view shared by monitoring and the mapping editor.
-use crate::{BUTTONS, backend::Input};
-use chaiky_egui::Theme;
-use eframe::egui::{self, Align2, FontId, Rect, RichText, Sense, Stroke, Vec2};
+//! Vector controller diagram shared by Live input and Mapping. Paint-only with one
+//! hit region per control; geometry is a fixed 500×372 design space scaled to fit.
+use crate::{
+    BUTTONS,
+    backend::Input,
+    ui::{Radius, Tokens, alpha, bold, semibold},
+};
+use eframe::egui::{
+    self, Align2, Color32, CornerRadius, CursorIcon, Rect, Sense, Stroke, StrokeKind, Vec2, pos2,
+    vec2,
+};
+use std::collections::BTreeMap;
 
+/// Badge drawn on a control: the target it sends, and whether it is a pending edit.
+pub struct Badge {
+    pub text: String,
+    pub pending: bool,
+}
+
+const DESIGN: Vec2 = vec2(500.0, 372.0);
+pub const MAX_WIDTH: f32 = 540.0;
+
+// (id, label, center x, center y, width, height, round)
+const CONTROLS: [(usize, &str, f32, f32, f32, f32, bool); 22] = [
+    (12, "LT", 120.0, 30.0, 74.0, 26.0, false),
+    (13, "RT", 380.0, 30.0, 74.0, 26.0, false),
+    (10, "LB", 128.0, 66.0, 82.0, 22.0, false),
+    (11, "RB", 372.0, 66.0, 82.0, 22.0, false),
+    (14, "L3", 122.0, 140.0, 54.0, 54.0, true),
+    (0, "↑", 172.0, 176.0, 28.0, 28.0, false),
+    (1, "→", 200.0, 204.0, 28.0, 28.0, false),
+    (2, "↓", 172.0, 232.0, 28.0, 28.0, false),
+    (3, "←", 144.0, 204.0, 28.0, 28.0, false),
+    (6, "View", 216.0, 128.0, 46.0, 24.0, false),
+    (9, "Menu", 284.0, 128.0, 46.0, 24.0, false),
+    (8, "Y", 390.0, 116.0, 32.0, 32.0, true),
+    (7, "X", 356.0, 150.0, 32.0, 32.0, true),
+    (5, "B", 424.0, 150.0, 32.0, 32.0, true),
+    (4, "A", 390.0, 184.0, 32.0, 32.0, true),
+    (15, "R3", 314.0, 216.0, 54.0, 54.0, true),
+    (16, "C", 378.0, 224.0, 30.0, 24.0, false),
+    (17, "Z", 414.0, 224.0, 30.0, 24.0, false),
+    (18, "M1", 420.0, 326.0, 44.0, 22.0, false),
+    (19, "M2", 80.0, 326.0, 44.0, 22.0, false),
+    (20, "M3", 388.0, 354.0, 44.0, 22.0, false),
+    (21, "M4", 112.0, 354.0, 44.0, 22.0, false),
+];
+
+const OUTLINE: [(f32, f32); 14] = [
+    (82.0, 84.0),
+    (160.0, 74.0),
+    (340.0, 74.0),
+    (418.0, 84.0),
+    (452.0, 146.0),
+    (476.0, 258.0),
+    (460.0, 288.0),
+    (428.0, 292.0),
+    (362.0, 252.0),
+    (138.0, 252.0),
+    (72.0, 292.0),
+    (40.0, 288.0),
+    (24.0, 258.0),
+    (48.0, 146.0),
+];
+
+/// Returns the clicked control id.
 pub fn controller(
     ui: &mut egui::Ui,
-    theme: Theme,
     input: &Input,
     selected: Option<usize>,
+    badges: &BTreeMap<usize, Badge>,
 ) -> Option<usize> {
-    let width = ui
-        .available_width()
-        .min(if selected.is_some() { 500.0 } else { 600.0 });
-    let scale = width / 500.0;
-    let (rect, _) = ui.allocate_exact_size(
-        Vec2::new(ui.available_width(), 330.0 * scale),
-        Sense::hover(),
-    );
-    let point = |x: f32, y: f32| {
-        rect.min + Vec2::new((rect.width() - width) * 0.5, 0.0) + Vec2::new(x, y) * scale
-    };
-    let p = ui.painter();
-    let outline = [
-        (80., 52.),
-        (160., 40.),
-        (340., 40.),
-        (420., 52.),
-        (454., 115.),
-        (476., 240.),
-        (459., 272.),
-        (426., 277.),
-        (361., 225.),
-        (139., 225.),
-        (74., 277.),
-        (41., 272.),
-        (24., 240.),
-        (46., 115.),
-    ]
-    .into_iter()
-    .map(|(x, y)| point(x, y))
-    .collect();
-    p.add(egui::Shape::convex_polygon(
-        outline,
-        theme.color("soft"),
-        Stroke::new(1.5_f32, theme.color("line")),
+    let t = Tokens::get(ui.ctx());
+    let p = t.p;
+    let width = ui.available_width().min(MAX_WIDTH);
+    let scale = width / DESIGN.x;
+    let (area, _) =
+        ui.allocate_exact_size(vec2(ui.available_width(), DESIGN.y * scale), Sense::hover());
+    let origin = area.min + vec2((area.width() - width) * 0.5, 0.0);
+    let point = |x: f32, y: f32| origin + vec2(x, y) * scale;
+    let painter = ui.painter().clone();
+
+    painter.add(egui::Shape::convex_polygon(
+        OUTLINE.iter().map(|(x, y)| point(*x, *y)).collect(),
+        p.raised,
+        Stroke::new(1.5_f32, p.border_ctl),
     ));
-    p.text(
-        point(250., 161.),
-        Align2::CENTER_CENTER,
-        "FreeDigi",
-        FontId::proportional(16.0 * scale),
-        theme.color("muted"),
-    );
-    let mut clicked = None;
-    let controls = [
-        (12, "LT", 106., 24., 64., 25.),
-        (13, "RT", 394., 24., 64., 25.),
-        (10, "LB", 106., 58., 64., 25.),
-        (11, "RB", 394., 58., 64., 25.),
-        (0, "↑", 151., 160., 30., 28.),
-        (1, "→", 180., 188., 30., 28.),
-        (2, "↓", 151., 216., 30., 28.),
-        (3, "←", 122., 188., 30., 28.),
-        (4, "A", 382., 155., 34., 34.),
-        (5, "B", 417., 120., 34., 34.),
-        (7, "X", 347., 120., 34., 34.),
-        (8, "Y", 382., 85., 34., 34.),
-        (6, "View", 218., 106., 44., 26.),
-        (9, "Menu", 281., 106., 44., 26.),
-        (16, "C", 379., 210., 30., 28.),
-        (17, "Z", 417., 210., 30., 28.),
-        (14, "L3", 103., 118., 52., 52.),
-        (15, "R3", 306., 194., 52., 52.),
-        (18, "M1", 176., 296., 46., 29.),
-        (19, "M2", 229., 296., 46., 29.),
-        (20, "M3", 282., 296., 46., 29.),
-        (21, "M4", 335., 296., 46., 29.),
-    ];
-    for (id, label, x, y, w, h) in controls {
-        let held = input.buttons.contains(&id);
-        let bounds = Rect::from_center_size(point(x, y), Vec2::new(w, h) * scale);
-        let fill = if held {
-            theme.color("accent")
-        } else if selected == Some(id) {
-            theme.color("glow")
-        } else {
-            theme.color("surface")
-        };
-        let fg = if held {
-            theme.color("on-accent")
-        } else {
-            theme.color("ink")
-        };
-        let response = ui.put(
-            bounds,
-            egui::Button::new(
-                RichText::new(if id < 4 { "" } else { label })
-                    .size(13.0 * scale)
-                    .color(fg),
-            )
-            .wrap_mode(egui::TextWrapMode::Extend)
-            .fill(fill)
-            .corner_radius(if id == 14 || id == 15 || [4, 5, 7, 8].contains(&id) {
-                30
-            } else {
-                8
-            })
-            .stroke(Stroke::new(
-                if selected == Some(id) {
-                    2.0_f32
-                } else {
-                    1.0_f32
-                },
-                theme.color(if selected == Some(id) {
-                    "accent"
-                } else {
-                    "line"
-                }),
-            )),
+    // Back paddles sit behind the grips: M2 over M4 on the left, M1 over M3 on the right.
+    for x in [96.0, 404.0] {
+        painter.text(
+            point(x, 304.0),
+            Align2::CENTER_CENTER,
+            "BACK",
+            bold(9.0 * scale.max(0.8)),
+            p.text_3,
         );
-        if response.clicked() {
-            clicked = Some(id);
-        }
-        response.on_hover_text(BUTTONS[id]);
-        if id < 4 {
-            let angle = id as f32 * std::f32::consts::FRAC_PI_2;
-            let rotate = |dx: f32, dy: f32| {
-                point(
-                    dx * angle.cos() - dy * angle.sin() + x,
-                    dx * angle.sin() + dy * angle.cos() + y,
-                )
-            };
-            ui.painter().add(egui::Shape::convex_polygon(
-                vec![rotate(0., -6.), rotate(6., 5.), rotate(-6., 5.)],
-                fg,
-                Stroke::NONE,
-            ));
-        }
-        if id == 14 || id == 15 {
-            let (sx, sy) = if id == 14 {
-                (input.left_x, input.left_y)
-            } else {
-                (input.right_x, input.right_y)
-            };
-            let dot = point(x + sx.clamp(-1.0, 1.0) * 17., y - sy.clamp(-1.0, 1.0) * 17.);
-            ui.painter().circle_stroke(
-                dot,
-                24.0 * scale,
-                Stroke::new(2.0_f32, theme.color("accent").gamma_multiply(0.7)),
+    }
+
+    let mut clicked = None;
+    for (id, label, x, y, w, h, round) in CONTROLS {
+        let rect = Rect::from_center_size(point(x, y), vec2(w, h) * scale);
+        let response = ui
+            .interact(
+                rect,
+                ui.id().with(("controller-button", id)),
+                Sense::click(),
+            )
+            .on_hover_cursor(CursorIcon::PointingHand)
+            .on_hover_text(BUTTONS[id]);
+        let held = input.buttons.contains(&id);
+        let is_selected = selected == Some(id);
+        let hovered = response.hovered();
+        let (fill, stroke, fg) = if held {
+            (p.accent, Stroke::new(1.0_f32, p.accent), p.on_accent)
+        } else if is_selected {
+            (p.accent_dim, Stroke::new(2.0_f32, p.accent), p.text)
+        } else if hovered {
+            (
+                p.control_hover,
+                Stroke::new(1.0_f32, p.border_strong),
+                p.text,
+            )
+        } else {
+            (p.control, Stroke::new(1.0_f32, p.border_ctl), p.text)
+        };
+        let radius = if round {
+            CornerRadius::same(Radius::PILL)
+        } else {
+            CornerRadius::same(Radius::CONTROL)
+        };
+        painter.rect(rect, radius, fill, stroke, StrokeKind::Inside);
+        if held && !t.reduced_motion {
+            painter.rect_stroke(
+                rect.expand(3.0),
+                radius,
+                Stroke::new(3.0_f32, alpha(p.accent, 0.3)),
+                StrokeKind::Outside,
             );
         }
         if id == 12 || id == 13 {
@@ -155,51 +142,116 @@ pub fn controller(
                 input.left_trigger
             } else {
                 input.right_trigger
+            }
+            .clamp(0.0, 1.0);
+            if amount > 0.0 {
+                let fillrect =
+                    Rect::from_min_size(rect.min, vec2(rect.width() * amount, rect.height()))
+                        .shrink(2.0);
+                painter.rect_filled(
+                    fillrect,
+                    CornerRadius::same(Radius::CONTROL - 2),
+                    alpha(p.accent, 0.45),
+                );
+            }
+        }
+        if id == 14 || id == 15 {
+            // Stick position as a cap ring, drawn under the label so text stays readable.
+            let (sx, sy) = if id == 14 {
+                (input.left_x, input.left_y)
+            } else {
+                (input.right_x, input.right_y)
             };
-            let track = Rect::from_min_size(
-                point(x - w / 2., y + h / 2. + 3.),
-                Vec2::new(w * amount.clamp(0., 1.), 3.) * scale,
+            let cap =
+                rect.center() + vec2(sx.clamp(-1.0, 1.0), -sy.clamp(-1.0, 1.0)) * 12.0 * scale;
+            painter.circle_stroke(
+                cap,
+                13.0 * scale,
+                Stroke::new(2.0_f32, if held { p.on_accent } else { p.accent }),
             );
-            ui.painter().rect_filled(track, 2, theme.color("accent"));
+        }
+        if id < 4 {
+            let angle = [
+                -std::f32::consts::FRAC_PI_2,
+                0.0,
+                std::f32::consts::FRAC_PI_2,
+                std::f32::consts::PI,
+            ][id];
+            let c = rect.center();
+            let r = 6.0 * scale;
+            let tri =
+                [0.0_f32, 2.3, -2.3].map(|a| c + vec2((angle + a).cos(), (angle + a).sin()) * r);
+            painter.add(egui::Shape::convex_polygon(tri.to_vec(), fg, Stroke::NONE));
+        } else {
+            painter.text(
+                rect.center(),
+                Align2::CENTER_CENTER,
+                label,
+                semibold(12.5 * scale.max(0.8)),
+                fg,
+            );
+        }
+        if let Some(badge) = badges.get(&id) {
+            draw_badge(
+                &painter,
+                &t,
+                rect.right_bottom() + vec2(-2.0, -2.0),
+                &badge.text,
+                badge.pending,
+                scale,
+            );
+        }
+        crate::ui::focus_ring(
+            ui,
+            &response,
+            rect,
+            if round { Radius::PILL } else { Radius::CONTROL },
+        );
+        if response.clicked() {
+            clicked = Some(id);
         }
     }
-    ui.painter().text(
-        point(115., 296.),
-        Align2::RIGHT_CENTER,
-        "BACK",
-        FontId::proportional(10.0 * scale),
-        theme.color("muted"),
-    );
     clicked
 }
 
-pub fn meter(ui: &mut egui::Ui, label: &str, value: f32, theme: Theme) {
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(155.0, 28.0), Sense::hover());
-    let p = ui.painter();
-    p.text(
-        rect.left_center(),
-        Align2::LEFT_CENTER,
-        label,
-        FontId::proportional(13.0),
-        theme.color("muted"),
+fn draw_badge(
+    painter: &egui::Painter,
+    t: &Tokens,
+    anchor: egui::Pos2,
+    text: &str,
+    pending: bool,
+    scale: f32,
+) {
+    let p = t.p;
+    let galley = painter.layout_no_wrap(
+        text.to_owned(),
+        bold(9.5 * scale.max(0.85)),
+        Color32::PLACEHOLDER,
     );
-    let track = Rect::from_min_size(rect.min + Vec2::new(25., 10.), Vec2::new(80., 8.));
-    p.rect_filled(track, 4, theme.color("soft"));
-    if value > 0. {
-        p.rect_filled(
-            Rect::from_min_size(
-                track.min,
-                Vec2::new(track.width() * value.clamp(0., 1.), track.height()),
-            ),
-            4,
-            theme.color("accent"),
-        );
-    }
-    p.text(
-        rect.right_center(),
-        Align2::RIGHT_CENTER,
-        format!("{:.0}%", value * 100.),
-        FontId::monospace(12.0),
-        theme.color("muted"),
+    let size = vec2(galley.size().x + 8.0, galley.size().y + 2.0);
+    let rect = Rect::from_center_size(anchor, size);
+    let (fill, stroke, fg) = if pending {
+        (p.accent, Stroke::new(1.0_f32, p.bg), p.on_accent)
+    } else {
+        (
+            p.control_pressed,
+            Stroke::new(1.0_f32, p.border_ctl),
+            p.text,
+        )
+    };
+    painter.rect(
+        rect,
+        CornerRadius::same(Radius::PILL),
+        fill,
+        stroke,
+        StrokeKind::Outside,
+    );
+    painter.galley(
+        pos2(
+            rect.center().x - galley.size().x / 2.0,
+            rect.center().y - galley.size().y / 2.0,
+        ),
+        galley,
+        fg,
     );
 }

@@ -52,7 +52,10 @@ pub struct State {
     pub visible_reads: Vec<String>,
     pub live_view: bool,
     pub focused: bool,
+    /// A user-requested operation (write or Refresh). Editors lock only for this.
     pub busy: String,
+    /// Scheduled background reads. Never locks editors; queued writes run after it.
+    pub syncing: bool,
     pub error: String,
     pub notice: String,
     pub completed: u64,
@@ -76,6 +79,7 @@ impl Default for State {
             live_view: true,
             focused: true,
             busy: String::new(),
+            syncing: false,
             error: String::new(),
             notice: String::new(),
             completed: 0,
@@ -127,9 +131,24 @@ impl Action {
             Self::Refresh => "Discover controllers",
             Self::Select(_) => "Select controller",
             Self::DryRun(_) => "Change write mode",
-            Self::Perform(name, _) => name,
+            Self::Perform(name, _) => human(name),
             Self::Shutdown => "Closing",
         }
+    }
+}
+/// User-facing names for service actions; wire names never reach the UI.
+pub fn human(action: &str) -> &str {
+    match action {
+        "profileApply" => "Saving mapping",
+        "lightingApply" => "Applying lighting",
+        "turboApply" => "Updating Turbo button",
+        "calibrationApply" => "Updating automatic calibration",
+        "profileRead" => "Reading profile",
+        "lightingRead" => "Reading lighting",
+        "turboRead" => "Reading Turbo button",
+        "calibrationRead" => "Reading calibration",
+        "firmwareRead" => "Reading firmware versions",
+        other => other,
     }
 }
 #[derive(Deserialize, Default)]
@@ -301,6 +320,34 @@ fn request(state: &State, action: &str, params: &Value) -> Result<Value, String>
     }
     Ok(request)
 }
+/// Every setting read. All are prefetched once per controller so pages open
+/// with data; afterwards only visible pages are revalidated.
+const ALL_READS: [&str; 5] = [
+    "profileRead",
+    "lightingRead",
+    "turboRead",
+    "calibrationRead",
+    "firmwareRead",
+];
+fn read_key(action: &str) -> Option<&'static str> {
+    match action {
+        "profileRead" => Some("snapshot"),
+        "lightingRead" => Some("lighting"),
+        "turboRead" => Some("turbo"),
+        "calibrationRead" => Some("calibration"),
+        "firmwareRead" => Some("versions"),
+        _ => None,
+    }
+}
+impl State {
+    /// True while a visible page has nothing cached to show yet.
+    pub fn awaiting_first_read(&self) -> bool {
+        self.visible_reads
+            .iter()
+            .filter_map(|a| read_key(a))
+            .any(|key| self.data.get(key).is_none())
+    }
+}
 fn snapshot_key(action: &str) -> Option<&'static str> {
     match action {
         "profileApply" => Some("snapshot"),
@@ -317,6 +364,7 @@ fn accept(state: &mut State, action: &str, result: Result<Reply, String>) {
         state.last_action = action.into();
     }
     let mut preview = false;
+    let mut changed = false;
     let outcome = result.and_then(|reply| {
         if !reply.events.is_null() && reply.events != json!([]) {
             state.log(action, &reply.events.to_string());
@@ -329,8 +377,13 @@ fn accept(state: &mut State, action: &str, result: Result<Reply, String>) {
             state.last_preview = preview;
         }
         if !preview && let Some(values) = reply.result.as_object() {
+            // Background revalidation leaves the view untouched unless the
+            // controller reports something different.
             for (key, value) in values {
-                state.data[key] = value.clone();
+                if state.data.get(key) != Some(value) {
+                    state.data[key] = value.clone();
+                    changed = true;
+                }
             }
         }
         Ok(reply.result)
@@ -339,7 +392,9 @@ fn accept(state: &mut State, action: &str, result: Result<Reply, String>) {
         Ok(value) => {
             state.setting_errors.remove(action);
             if reading {
-                state.log(action, "Synchronized");
+                if changed {
+                    state.log(action, "Updated from the controller");
+                }
                 return;
             }
             state.error.clear();
@@ -359,13 +414,8 @@ fn accept(state: &mut State, action: &str, result: Result<Reply, String>) {
         }
         Err(error) => {
             // Never reuse a possibly stale snapshot after an uncertain operation/read.
-            let key = snapshot_key(action).or(match action {
-                "profileRead" => Some("snapshot"),
-                "lightingRead" => Some("lighting"),
-                "turboRead" => Some("turbo"),
-                "calibrationRead" => Some("calibration"),
-                _ => None,
-            });
+            let key = snapshot_key(action)
+                .or_else(|| read_key(action).filter(|_| action != "firmwareRead"));
             if let Some(key) = key {
                 state.data.as_object_mut().unwrap().remove(key);
             }
@@ -381,6 +431,8 @@ fn accept(state: &mut State, action: &str, result: Result<Reply, String>) {
 }
 struct Monitor {
     child: Child,
+    /// Set once the helper finished its identity handshake and enabled the stream.
+    started: Arc<AtomicBool>,
     stdin: Option<ChildStdin>,
     reader: Option<thread::JoinHandle<()>>,
 }
@@ -431,6 +483,8 @@ impl Worker {
         let stdout = child.stdout.take().unwrap();
         let state = self.state.clone();
         let ctx = self.ctx.clone();
+        let started = Arc::new(AtomicBool::new(false));
+        let started_flag = started.clone();
         let reader = thread::spawn(move || {
             for line in BufReader::new(stdout).lines() {
                 let Ok(line) = line else { break };
@@ -444,6 +498,9 @@ impl Worker {
                     }
                 } else if value["event"] == "monitor" {
                     s.monitoring = value["running"] == true;
+                    if s.monitoring {
+                        started_flag.store(true, Ordering::Relaxed);
+                    }
                     if s.monitoring && s.error_action == "monitor" {
                         s.error.clear();
                         s.error_action.clear();
@@ -456,6 +513,10 @@ impl Worker {
                     s.error_action = "monitor".into();
                     let error = s.error.clone();
                     s.log("Monitor", &error);
+                    // Handshake attempts, elapsed time and unmatched headers; no profile data.
+                    if value["events"].as_array().is_some_and(|e| !e.is_empty()) {
+                        s.log("Monitor diagnostics", &value["events"].to_string());
+                    }
                 }
                 let repaint = value["event"] != "input" || (s.live_view && s.focused);
                 drop(s);
@@ -466,6 +527,7 @@ impl Worker {
         });
         self.monitor = Some(Monitor {
             child,
+            started,
             stdin: Some(stdin),
             reader: Some(reader),
         });
@@ -480,23 +542,10 @@ impl Worker {
             if self.closing.load(Ordering::Relaxed) {
                 break;
             }
-            if self
-                .monitor
-                .as_mut()
-                .is_some_and(|m| matches!(m.child.try_wait(), Ok(Some(_))))
-            {
-                self.stop();
-                self.schedule.monitor_failed(Instant::now());
-                self.schedule.reset_reads();
-                self.schedule.discovery = Instant::now();
-                let mut s = self.state.lock().unwrap();
-                s.input = Input::default();
-                s.data = json!({});
-                s.log(
-                    "Monitor",
-                    "Stream ended; checking connection and scheduling reconnect.",
-                );
-                self.ctx.request_repaint();
+            if let Some(started) = self.monitor.as_mut().and_then(|m| {
+                matches!(m.child.try_wait(), Ok(Some(_))).then(|| m.started.load(Ordering::Relaxed))
+            }) {
+                self.monitor_exited(started, Instant::now());
             }
             match receiver.recv_timeout(Duration::from_millis(100)) {
                 Ok(Action::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
@@ -515,6 +564,37 @@ impl Worker {
             }
         }
         self.stop();
+    }
+    fn monitor_exited(&mut self, started: bool, now: Instant) {
+        self.stop();
+        self.schedule.monitor_failed(now);
+        let mut s = self.state.lock().unwrap();
+        s.input = Input::default();
+        if started {
+            // A running stream ended: the device may be gone, so cached
+            // settings are no longer trustworthy.
+            self.schedule.reset_reads();
+            self.schedule.discovery = now;
+            s.data = json!({});
+            s.log(
+                "Monitor",
+                "Stream ended; checking connection and scheduling reconnect.",
+            );
+        } else {
+            // The helper exited before the stream started (identity handshake
+            // failed). The controller was not shown to be removed; keep cached
+            // settings so a slow handshake does not trigger a read/start loop.
+            let wait = self
+                .schedule
+                .monitor
+                .saturating_duration_since(now)
+                .as_secs();
+            s.log(
+                "Monitor",
+                &format!("Input stream did not start; retrying in {wait}s."),
+            );
+        }
+        self.ctx.request_repaint();
     }
     fn discover(&mut self) -> Result<(), String> {
         let reply = invoke(&json!({"action":"devices"}), &self.closing)?;
@@ -586,7 +666,13 @@ impl Worker {
         if state.monitoring {
             self.schedule.monitor_failures = 0;
         }
-        let reads = self.schedule.due(&state.visible_reads, now);
+        self.schedule.navigated(&state.visible_reads, now);
+        let mut reads = self.schedule.due(&state.visible_reads, now);
+        for action in self.schedule.prefetch() {
+            if !reads.contains(&action) {
+                reads.push(action);
+            }
+        }
         if !reads.is_empty() {
             // Reserve the same operation slot as explicit writes. No two helpers
             // ever own the controller interface at once.
@@ -595,7 +681,7 @@ impl Worker {
                 if !s.busy.is_empty() {
                     return;
                 }
-                s.busy = "Syncing controller settings".into();
+                s.syncing = true;
             }
             self.stop();
             self.ctx.request_repaint();
@@ -604,12 +690,15 @@ impl Worker {
                     break;
                 }
                 // Navigation may have changed during a slower device read.
-                if !self.state.lock().unwrap().visible_reads.contains(&action) {
+                // Prefetches (never read yet) still run.
+                if self.schedule.reads.contains_key(&action)
+                    && !self.state.lock().unwrap().visible_reads.contains(&action)
+                {
                     continue;
                 }
                 self.read(&action);
             }
-            self.state.lock().unwrap().busy.clear();
+            self.state.lock().unwrap().syncing = false;
             self.ctx.request_repaint();
         }
         if self.monitor.is_none()
@@ -720,7 +809,12 @@ struct Schedule {
     monitor: Instant,
     monitor_failures: u32,
     reads: BTreeMap<String, (Instant, u32)>,
+    /// Last successful read, so opening a page revalidates at most every few seconds.
+    fresh: BTreeMap<String, Instant>,
+    visible: Vec<String>,
 }
+/// Opening a page re-reads its settings unless they were read this recently.
+const REVALIDATE_ON_OPEN: Duration = Duration::from_secs(3);
 impl Schedule {
     fn new(now: Instant) -> Self {
         Self {
@@ -728,10 +822,38 @@ impl Schedule {
             monitor: now,
             monitor_failures: 0,
             reads: BTreeMap::new(),
+            fresh: BTreeMap::new(),
+            visible: vec![],
         }
     }
     fn reset_reads(&mut self) {
         self.reads.clear();
+        self.fresh.clear();
+    }
+    /// Settings that became visible are due now, unless just read or backing off.
+    fn navigated(&mut self, visible: &[String], now: Instant) {
+        for action in visible.iter().filter(|a| !self.visible.contains(a)) {
+            let failing = self.reads.get(action).is_some_and(|(_, f)| *f > 0);
+            let recent = self
+                .fresh
+                .get(action)
+                .is_some_and(|at| now.saturating_duration_since(*at) < REVALIDATE_ON_OPEN);
+            if !failing
+                && !recent
+                && let Some((due, _)) = self.reads.get_mut(action)
+            {
+                *due = now;
+            }
+        }
+        self.visible = visible.to_vec();
+    }
+    /// Settings never read for this controller.
+    fn prefetch(&self) -> Vec<String> {
+        ALL_READS
+            .iter()
+            .filter(|a| !self.reads.contains_key(**a))
+            .map(|a| (*a).to_owned())
+            .collect()
     }
     fn due(&self, visible: &[String], now: Instant) -> Vec<String> {
         visible
@@ -758,6 +880,9 @@ impl Schedule {
             action.into(),
             (now + Duration::from_secs(seconds), failures),
         );
+        if success {
+            self.fresh.insert(action.into(), now);
+        }
     }
     fn monitor_failed(&mut self, now: Instant) {
         self.monitor_failures = (self.monitor_failures + 1).min(5);
@@ -805,6 +930,58 @@ mod tests {
         assert_eq!(schedule.due(&lighting, now), lighting);
     }
     #[test]
+    fn prefetches_all_settings_once_and_revalidates_opened_pages() {
+        let now = Instant::now();
+        let mut schedule = Schedule::new(now);
+        assert_eq!(schedule.prefetch().len(), ALL_READS.len());
+        for action in ALL_READS {
+            schedule.read_finished(action, true, now);
+        }
+        assert!(schedule.prefetch().is_empty());
+        let lighting = vec!["lightingRead".to_string()];
+        // Opening right after a read reuses it; opening later re-reads once.
+        schedule.navigated(&lighting, now + Duration::from_secs(1));
+        assert!(
+            schedule
+                .due(&lighting, now + Duration::from_secs(1))
+                .is_empty()
+        );
+        schedule.navigated(&[], now + Duration::from_secs(5));
+        schedule.navigated(&lighting, now + Duration::from_secs(5));
+        assert_eq!(
+            schedule.due(&lighting, now + Duration::from_secs(5)),
+            lighting
+        );
+        // Staying on the page does not repeat it.
+        schedule.read_finished("lightingRead", true, now + Duration::from_secs(5));
+        schedule.navigated(&lighting, now + Duration::from_secs(10));
+        assert!(
+            schedule
+                .due(&lighting, now + Duration::from_secs(10))
+                .is_empty()
+        );
+    }
+    #[test]
+    fn unchanged_reads_leave_cached_data_and_log_untouched() {
+        let mut state = State::default();
+        let reply = || {
+            Ok(Reply {
+                ok: true,
+                result: json!({"turbo": {"enabled": true}}),
+                ..Reply::default()
+            })
+        };
+        accept(&mut state, "turboRead", reply());
+        let logs = state.logs.len();
+        accept(&mut state, "turboRead", reply());
+        assert_eq!(state.logs.len(), logs);
+        assert_eq!(state.data["turbo"], json!({"enabled": true}));
+        state.visible_reads = vec!["turboRead".into(), "calibrationRead".into()];
+        assert!(state.awaiting_first_read());
+        state.data["calibration"] = json!({});
+        assert!(!state.awaiting_first_read());
+    }
+    #[test]
     fn discovery_preserves_selection_and_skips_inaccessible_devices() {
         let device = |path: &str, accessible| Device {
             path: path.into(),
@@ -841,6 +1018,32 @@ mod tests {
         assert_eq!(state.completed, 1);
         assert_eq!(state.last_action, "profileApply");
         assert_eq!(state.error, "write failed");
+    }
+    #[test]
+    fn failed_handshake_keeps_settings_but_ended_stream_resyncs() {
+        let now = Instant::now();
+        let mut worker = Worker {
+            state: Arc::new(Mutex::new(State::default())),
+            ctx: egui::Context::default(),
+            closing: Arc::new(AtomicBool::new(false)),
+            monitor: None,
+            schedule: Schedule::new(now),
+        };
+        let lighting = vec!["lightingRead".to_string()];
+        worker.state.lock().unwrap().data = json!({"lighting": {}});
+        worker.schedule.read_finished("lightingRead", true, now);
+
+        worker.monitor_exited(false, now);
+        assert_eq!(worker.state.lock().unwrap().data, json!({"lighting": {}}));
+        assert!(worker.schedule.due(&lighting, now).is_empty());
+        assert_eq!(worker.schedule.monitor, now + Duration::from_secs(1));
+        worker.monitor_exited(false, now);
+        assert_eq!(worker.schedule.monitor, now + Duration::from_secs(2));
+
+        worker.monitor_exited(true, now);
+        assert_eq!(worker.state.lock().unwrap().data, json!({}));
+        assert_eq!(worker.schedule.due(&lighting, now), lighting);
+        assert_eq!(worker.schedule.discovery, now);
     }
     #[test]
     fn snapshots_share_log_storage_until_a_new_event() {

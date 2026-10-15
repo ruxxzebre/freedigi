@@ -157,17 +157,18 @@ saved automatically on the Mac and reused by the other controller previews;
 
 ## Build
 
-Swift 6 / Xcode 16 or newer command-line tools are required. Run
-`./scripts/build-mac.sh` to test, build the CLI, and package the app. The repository vendors the universal
-macOS framework from the official
-[SDL 3.4.12 release](https://github.com/libsdl-org/SDL/releases/tag/release-3.4.12),
-and `make app` embeds and signs it inside `ControlLab.app`.
+The SwiftUI app, its Xcode project and app packaging scripts were removed from
+this repository after revision `51609d3`; FreeDigi's native interface replaces them
+(see [README.md](README.md)). The UI described above is available in that
+revision and upstream. The protocol core, tests and CLI remain.
+
+Swift 6 / Xcode 16 or newer command-line tools are required. The repository
+vendors the universal macOS framework from the official
+[SDL 3.4.12 release](https://github.com/libsdl-org/SDL/releases/tag/release-3.4.12).
 
 ```sh
 make test       # build the package and run core tests
 make cli        # build controllab-cli
-make gui        # build the SwiftUI executable
-make app        # package build/ControlLab.app
 ```
 
 Run the monitor-only CLI without the virtual-HID entitlement:
@@ -201,29 +202,6 @@ swift run controllab-cli --dock-color 0060FF 75
 swift run controllab-cli --dock-mode gradient
 swift run controllab-cli --dock-off
 ```
-
-Open the packaged GUI:
-
-```sh
-open build/ControlLab.app
-```
-
-For virtual-gamepad output, sign the executable with a provisioning profile
-that contains `com.apple.developer.hid.virtual.device`. A sample entitlement
-file is included as `ControlLab.entitlements`. Set `SIGNING_IDENTITY` when packaging
-an approved build:
-
-```sh
-ENABLE_VIRTUAL_HID=1 \
-APP_BUNDLE_IDENTIFIER="dev.yourname.controllab" \
-PROVISIONING_PROFILE="/path/to/approved.provisionprofile" \
-SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" make app
-```
-
-To use Xcode's Signing & Capabilities UI, open `ControlLab.xcodeproj`. Select
-**ControlLab** for ordinary settings access, or **ControlLab Native Gamepad**
-after obtaining the approved entitlement/profile. Follow the
-[signing and validation guide](docs/native-gamepad.md).
 
 For a receiver-to-Xbox report preview without creating a virtual device:
 `swift run controllab-cli --xbox --dry-run`.

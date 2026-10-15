@@ -1,7 +1,7 @@
 # FreeDigi native
 
 Rust + egui interface for Linux and macOS, using the existing ControlLab-derived
-Swift controller service. The older Wails preview stays in `../desktop`.
+Swift controller service.
 
 ## Run
 

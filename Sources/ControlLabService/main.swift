@@ -57,13 +57,14 @@ final class StopFlag: @unchecked Sendable {
     var stopped: Bool { lock.lock(); defer { lock.unlock() }; return value }
 }
 func monitor(_ request: Request) throws {
-    let channel = try HIDChannel(path: request.path)
-    _ = try ControllerProfileClient(channel: channel, operation: "starting input monitoring").identity()
+    // EOF on stdin cancels startup retries as well as a running stream.
+    let stop = StopFlag()
+    Thread.detachNewThread { _ = readLine(); stop.stop() }
+    guard let (channel, _) = try ControllerMonitorStartup.handshake(cancelled: { stop.stopped },
+        open: { try HIDChannel(path: request.path) }) else { return }
     for cmd: UInt8 in [0xa1, 2, 4] { try channel.send(ControllerCommand.frame(cmd)) }
     try channel.send(ControllerCommand.frame(0x11, payload: [255, 1, 255, 255, 255]))
     defer { try? channel.send(ControllerCommand.frame(0x11, payload: [255, 0, 255, 255, 255])) }
-    let stop = StopFlag()
-    Thread.detachNewThread { _ = readLine(); stop.stop() }
     output(["event": "monitor", "running": true])
     var last: InputState?, published: TimeInterval = 0
     while !stop.stopped {

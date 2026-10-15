@@ -83,12 +83,43 @@ report. Earlier user testing used a Vader 5 Pro and USB receiver on macOS 27.0
 
 No root cause or hardware fix has been demonstrated yet.
 
+### Follow-up implemented after this handoff (not yet hardware-validated)
+
+- `ControllerMonitorStartup.handshake` (in `Sources/ControllerProtocol`) retries only
+  the read-only identity query, at most three attempts, each on a freshly opened
+  channel with 200 ms between attempts. Open/validation errors are not retried;
+  stream setup (`0xa1`, `0x02`, `0x04`, `0x11`) runs once, after success. Stdin EOF
+  now cancels startup between attempts. Each attempt is recorded in Diagnostics.
+- The native monitor reader imports the helper's `events` array into the app log
+  on monitor failure.
+- `Worker::monitor_exited` distinguishes a helper that exited before its stream
+  started (handshake failure: keep cached settings and read freshness, back off)
+  from a running stream that ended (clear caches, resync, rediscover). The status
+  shows "Retrying input stream…" while a monitor error is pending.
+- Regressions: `MonitorStartupTests` (retry -> success, persistent failure,
+  cancellation, non-retryable open failure) and the Rust test
+  `failed_handshake_keeps_settings_but_ended_stream_resyncs`.
+- Still required: physical Mac/receiver check per steps 2, 3 and 8 above.
+
+### UI follow-up after hardware check (October 15)
+
+User-reported issues fixed with a Vader 5 Pro attached: back buttons are M2/M4 on
+the left grip and M1/M3 on the right, M1/M2 on top, with the BACK labels clear of
+them; stick position is a ring under the L3/R3 label; D-pad quick picks read
+Up/Right/Down/Left (arrows exist only in the bundled Hack font, now a fallback);
+the factory profile name 配置1 renders through a system CJK font loaded only
+when needed; Features/Lighting rows center their controls; Mapping starts with no
+button selected; half-width table stripes removed. Palette uses the nonbinary
+flag colors (accent purple, Live yellow #FCF434 on #2C2C2C, white switch thumb)
+without decorative stripes. New app icon: `native/assets/freedigi.svg`.
+
 ## What is implemented and pushed
 
-- Active app: **Rust + egui 0.33.3, Glow/OpenGL**, in `native/`. Linux and macOS
+- Active app: **Rust + egui 0.33.3**, wgpu/Metal on macOS and Glow/OpenGL on Linux, in `native/`. Linux and macOS
   targets; Windows has groundwork only. No active Wails/webview dependency.
-- Original ControlLab Swift source and the previous Wails/React preview in
-  `desktop/` are preserved. FreeDigi credits ControlLab/dracinn in UI and docs.
+- The SwiftUI ControlLab app (Xcode project, packaging scripts) and the Wails/React
+  preview in `desktop/` were removed after `51609d3`. The ControlLab protocol core,
+  CLI and tests remain. FreeDigi credits ControlLab/dracinn in UI and docs.
   Historical `docs/mac-handoff.md` describes the original Swift app, not the
   current FreeDigi build/run path.
 - Existing Swift protocol code powers a bundled JSON helper, `freedigi-service`
@@ -100,6 +131,10 @@ No root cause or hardware fix has been demonstrated yet.
 - Automatic discovery selects an accessible interface while preserving a valid
   current selection. Discovery polls every second when absent, five seconds
   when selected. Monitoring starts automatically while focused.
+- Every setting is prefetched once per controller (visible page first). Opening a
+  page re-reads its settings unless read in the last 3 s; cached data is replaced
+  and logged only when the controller reports a difference. The header shows
+  "Syncing" only while a visible page has nothing cached.
 - Visible settings refresh every 30 seconds; firmware versions every 10 minutes.
   Read failures back off. One global Refresh remains; individual Read and
   Start-monitor buttons were removed from the active native interface.
@@ -137,8 +172,14 @@ Implemented findings:
 - Diagnostics exposes atlas dimensions, texture bytes/count and image-cache bytes.
 - Logs remain bounded; image/font caches are retained rather than rebuilt.
 
-Glow is enabled; optional wgpu packages in Cargo.lock do not mean wgpu runs.
-Cocoa/OpenGL/Retina buffers are a plausible remaining cost, not a measured cause.
+Measured on macOS 27 (Apple silicon, Retina, default 1180×820 window, controller
+attached, `footprint`): Glow/OpenGL used **144 MB** (189 MB once the CJK fallback
+font was read into memory). `vmmap` showed six full-window 2360×1640 IOSurfaces
+(89 MB): OpenGL's double buffer plus four AppKit backing copies. macOS now renders
+through wgpu/Metal with frame latency 1: two drawables (30 MB), **79 MB** on Live
+input, about 100 MB after visiting Mapping (larger text layout plus compressed
+pages while in the background). The CJK font is memory-mapped (384 KB resident).
+Live heap is ~14 MB; the drawables scale with window size.
 On Mac, compare `vmmap -summary PID` idle and after monitoring/navigation. The UI
 counters exclude OS/window/driver allocations. Linux software-rendering samples
 were affected by swapping; include SwapPss with PSS. Lower resident PSS alone was

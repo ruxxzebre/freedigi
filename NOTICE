@@ -3,12 +3,11 @@ Original project: https://github.com/dracinn/ControlLab
 Copyright (c) 2026 dracinn. Licensed under the MIT License; see LICENSE.
 
 FreeDigi retains ControlLab's controller protocol, recovery logic and tests.
-Its new desktop interface uses Wails (MIT), React (MIT) and Lucide (ISC).
+Its desktop interface is native Rust with egui (MIT OR Apache-2.0).
 Dependency license texts accompany packaged builds in THIRD_PARTY_NOTICES.txt.
 
-The Flydigi controller image is retained from the original application's
-resources. Flydigi product names, logos and controller imagery belong to
-their respective owners; their inclusion does not imply endorsement.
+Flydigi product names belong to their respective owners; their use to
+identify supported hardware does not imply endorsement.
 
 The native Rust interface includes selected components, palette and gull artwork
 from the Chaiky project / Core shared theme. Source revision and file hashes are

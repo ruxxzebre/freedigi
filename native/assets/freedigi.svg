@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3D2866"/>
+      <stop offset="1" stop-color="#1F1633"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.45" r="0.5">
+      <stop offset="0" stop-color="#B07CE6" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#B07CE6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <circle cx="512" cy="500" r="360" fill="url(#glow)"/>
+  <g transform="translate(146.8 151.2) scale(4.4)">
+    <ellipse cx="86" cy="129" rx="38" ry="5" fill="#140E22" opacity="0.45"/>
+    <path d="M66 115v13m-7 0h13m23-13v13m-6 0h13" stroke="#CB914B" stroke-width="5" stroke-linecap="round"/>
+    <path d="M116 91c9 1 16-2 23-8-1 16-12 28-28 29" fill="#D7D7EE" stroke="#685681" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M43 86c-5-8-5-21 0-32 6-14 17-22 30-22 22 0 34 17 34 36 0 6 1 11 7 17 7 7 10 17 3 25-9 11-26 14-42 10-19-4-31-15-32-34Z" fill="#FFFCF7" stroke="#685681" stroke-width="3"/>
+    <path d="m45 70-19 8 20 6" fill="#F4BE68" stroke="#685681" stroke-width="3" stroke-linejoin="round"/>
+    <circle cx="60" cy="64" r="4" fill="#493A60"/>
+    <circle cx="61" cy="63" r="1.2" fill="white"/>
+    <ellipse cx="65" cy="77" rx="7" ry="4" fill="#F3B5C7"/>
+    <path d="m73 34 3-9m3 10 8-6" stroke="#685681" stroke-width="3" stroke-linecap="round"/>
+    <!-- Gamepad held against the belly; flag colors live in its buttons. -->
+    <path d="M66 92h40c7 0 11 4 13 11l4 12c2 7-5 11-10 6l-6-6H65l-6 6c-5 5-12 1-10-6l4-12c2-7 6-11 13-11Z" fill="#2C2C2C" stroke="#685681" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M70 98.5v10m-5-5h10" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round"/>
+    <circle cx="101" cy="103.5" r="2.7" fill="#FCF434"/>
+    <circle cx="107" cy="99" r="2.7" fill="#FFFFFF"/>
+    <circle cx="107" cy="108" r="2.7" fill="#B07CE6"/>
+    <path d="M83 105h6" stroke="#77737F" stroke-width="2" stroke-linecap="round"/>
+    <!-- Wing tips wrapped around the grips. -->
+    <path d="M47 112c-1-6 4-10 9-9 4 1 6 5 5 9-1 5-6 7-10 5" fill="#E3E1F1" stroke="#685681" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M125 112c1-6-4-10-9-9-4 1-6 5-5 9 1 5 6 7 10 5" fill="#E3E1F1" stroke="#685681" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="m124 30 2-7 2 7 7 2-7 2-2 7-2-7-7-2Z" fill="#FCF434"/>
+  </g>
+</svg>

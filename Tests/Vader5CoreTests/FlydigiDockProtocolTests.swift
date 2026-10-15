@@ -233,7 +233,7 @@ import Testing
         .deletingLastPathComponent()
         .deletingLastPathComponent()
     let resources = repository
-        .appendingPathComponent("Sources/Vader5GUI/Resources/FlydigiDockDefaults")
+        .appendingPathComponent("Resources/FlydigiDockDefaults")
 
     for deviceType in 0...4 {
         let data = try Data(contentsOf: resources.appendingPathComponent(

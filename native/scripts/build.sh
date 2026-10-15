@@ -32,7 +32,7 @@ run_swift() {
 run_swift test --build-system native -c release -Xswiftc -enable-testing -j "$jobs"
 run_swift build "${swift_flags[@]}" -j "$jobs" --product controllab-service
 helper_dir="$(run_swift build "${swift_flags[@]}" --show-bin-path)"
-python3 desktop/scripts/check-service.py "$helper_dir/controllab-service"
+python3 native/scripts/check-service.py "$helper_dir/controllab-service"
 cargo test --locked --release --manifest-path native/Cargo.toml -j "$jobs"
 cargo build --locked --release --manifest-path native/Cargo.toml -j "$jobs"
 mkdir -p native/dist
@@ -46,7 +46,7 @@ if [ "$platform" = macos ]; then
   python3 - "$app/Contents/Info.plist" <<'PYTHON'
 import plistlib
 import sys
-with open("desktop/build/darwin/Info.plist", "rb") as source:
+with open("native/assets/Info.plist", "rb") as source:
     info = plistlib.load(source)
 info.update(CFBundleExecutable="freedigi", CFBundleVersion="0.2.0", CFBundleShortVersionString="0.2.0", CFBundleIconFile="freedigi")
 with open(sys.argv[1], "wb") as target:
@@ -94,8 +94,8 @@ if [ "$platform" = macos ]; then
   printf '\nOpen it with: open native/dist/FreeDigi.app\n'
 else
   strip --strip-unneeded "$bin/freedigi-service"
-  cp desktop/assets/70-freedigi.rules native/assets/freedigi.png "$bin/"
-  install -m 755 desktop/scripts/install-linux.sh "$bin/install.sh"
+  cp native/assets/70-freedigi.rules native/assets/freedigi.png "$bin/"
+  install -m 755 native/scripts/install-linux.sh "$bin/install.sh"
   tar -czf "native/dist/FreeDigi-linux-$arch.tar.gz" -C "$stage" FreeDigi
 fi
 printf '\nBuilt FreeDigi for %s/%s in native/dist\n' "$platform" "$arch"

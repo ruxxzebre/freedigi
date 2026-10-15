@@ -31,8 +31,8 @@ The Go service boundary also cross-compiles for Windows amd64. This is a compile
 
 ## Native egui preview (2026-10-15)
 
-The native interface is in `native/`, using egui 0.33.3 with Glow. Wgpu is not
-enabled. Linux launch against the real Swift helper passed under Xvfb with Mesa
+The native interface is in `native/`, using egui 0.33.3 with Glow (macOS later
+moved to wgpu/Metal; see the memory note in `freedigi-handoff.md`). Linux launch against the real Swift helper passed under Xvfb with Mesa
 software OpenGL; no controller was attached. Eight native state tests cover
 request authority, failed-write snapshot invalidation, dry-run preservation,
 profile draft identity/slot ownership, visible-page freshness/backoff, accessible
@@ -49,7 +49,7 @@ measurements, not a promised budget or a macOS result. The previous Wails sample
 
 Linux packaging and GitHub CI are being checked for the new native path. Mac
 compilation and actual controller interaction still require a Mac/controller.
-The existing Wails and original ControlLab source are preserved.
+The Wails preview and the SwiftUI ControlLab app were later removed from `main` after revision `51609d3`; the ControlLab protocol, core and CLI remain.
 
 ### Automatic sync and memory follow-up
 

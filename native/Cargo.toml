@@ -2,14 +2,21 @@
 name = "freedigi"
 version = "0.2.0"
 edition = "2024"
+rust-version = "1.97"
 license = "MIT"
 description = "Native FreeDigi controller configuration for Linux and macOS"
 
 [dependencies]
 eframe = { version = "=0.33.3", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
-chaiky-egui = { path = "vendor/chaiky-theme", default-features = false, features = ["card", "button", "navigation", "badge", "toggle", "status", "mascot", "empty"] }
+chaiky-egui = { path = "vendor/chaiky-theme", default-features = false, features = ["mascot"] }
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
+
+# macOS renders through Metal: OpenGL there is presented via extra full-window
+# AppKit backing surfaces (about 60 MB at Retina size). Linux keeps Glow.
+[target.'cfg(target_os = "macos")'.dependencies]
+eframe = { version = "=0.33.3", default-features = false, features = ["wgpu"] }
+wgpu = { version = "27.0.1", default-features = false, features = ["metal", "wgsl"] }
 
 [profile.release]
 strip = true

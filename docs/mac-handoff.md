@@ -2,7 +2,9 @@
 
 > Historical handoff for the original ControlLab Swift app. For the current
 > FreeDigi Rust/egui app, completed work and unresolved monitoring timeout, see
-> [the FreeDigi handoff](freedigi-handoff.md).
+> [the FreeDigi handoff](freedigi-handoff.md). The SwiftUI app, Xcode project and
+> the scripts named below were removed from `main` after revision `51609d3`; check out
+> that revision to use them.
 
 The user built and opened revision `de74fc8` on a Mac and reported that connection
 and controller lighting work through the USB dongle. That does not establish

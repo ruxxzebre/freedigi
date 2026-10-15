@@ -1,4 +1,4 @@
-.PHONY: all test cli gui app clean
+.PHONY: all test cli clean
 
 all: test
 
@@ -7,12 +7,6 @@ test:
 
 cli:
 	swift build --product controllab-cli
-
-gui:
-	swift build --product ControlLab
-
-app:
-	./scripts/package-app.sh
 
 clean:
 	swift package clean

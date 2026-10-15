@@ -34,10 +34,6 @@ package = Package(
     products: [
         .library(name: "Vader5Core", targets: ["Vader5Core"]),
         .executable(name: "controllab-cli", targets: ["Vader5CLI"]),
-        .executable(name: "ControlLab", targets: ["ControlLab"]),
-        .executable(
-            name: "ControlLabRGBPreview",
-            targets: ["ControlLabRGBPreview"]),
     ],
     targets: [
         .target(name: "ControllerProtocol"),
@@ -74,52 +70,6 @@ package = Package(
             dependencies: ["Vader5Core"],
             path: "Sources/Vader5CLI",
             linkerSettings: [.linkedFramework("AppKit")]
-        ),
-        .executableTarget(
-            name: "ControlLab",
-            dependencies: ["Vader5Core"],
-            path: "Sources/Vader5GUI",
-            exclude: [
-                "Resources",
-                "DockLightingPreview.swift",
-                "RGBPreviewApp.swift",
-            ],
-            linkerSettings: [
-                .linkedFramework("AppKit"),
-                .linkedFramework("SwiftUI"),
-                .linkedFramework("GameController"),
-            ]
-        ),
-        .executableTarget(
-            name: "ControlLabRGBPreview",
-            dependencies: ["Vader5Core"],
-            path: "Sources/Vader5GUI",
-            exclude: [
-                "Resources",
-                "BridgeViewModel.swift",
-                "ContentView.swift",
-                "ControlLabApp.swift",
-                "ControllerConfigurationView.swift",
-                "DeviceProfilesView.swift",
-                "GameCompatibilityView.swift",
-                "CalibrationView.swift",
-                "TurboButtonView.swift",
-                "OperationLogView.swift",
-                "ControllerInputView.swift",
-                "DockFactoryLightingStore.swift",
-                "FirmwareDiagnosticsView.swift",
-                "FirmwareInstallView.swift",
-                "RGBPreviewProcess.swift",
-                "SpaceStationTheme.swift",
-            ],
-            sources: [
-                "DockLightingPreview.swift",
-                "RGBPreviewApp.swift",
-            ],
-            linkerSettings: [
-                .linkedFramework("AppKit"),
-                .linkedFramework("SwiftUI"),
-            ]
         ),
         .testTarget(
             name: "Vader5CoreTests",

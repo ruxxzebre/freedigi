@@ -1,5 +1,10 @@
 # Native gamepad output and Xcode signing
 
+> Historical. This describes the original SwiftUI ControlLab app, its Xcode
+> project and packaging scripts, which were removed from `main` after revision `51609d3`.
+> The virtual-gamepad encoder remains in `Vader5Core`; FreeDigi does not create a
+> virtual gamepad.
+
 ControlLab can now encode standard Xbox-style input from the USB receiver, create
 a virtual HID device, check each report submission, and show what Apple's
 GameController API sees. This is experimental: portable report tests pass, but
