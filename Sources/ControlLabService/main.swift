@@ -58,7 +58,7 @@ final class StopFlag: @unchecked Sendable {
 }
 func monitor(_ request: Request) throws {
     let channel = try HIDChannel(path: request.path)
-    _ = try ControllerProfileClient(channel: channel).identity()
+    _ = try ControllerProfileClient(channel: channel, operation: "starting input monitoring").identity()
     for cmd: UInt8 in [0xa1, 2, 4] { try channel.send(ControllerCommand.frame(cmd)) }
     try channel.send(ControllerCommand.frame(0x11, payload: [255, 1, 255, 255, 255]))
     defer { try? channel.send(ControllerCommand.frame(0x11, payload: [255, 0, 255, 255, 255])) }
@@ -138,7 +138,12 @@ do {
     let request = try JSONDecoder().decode(Request.self, from: Data(line.utf8))
     if request.action == "monitor" { try monitor(request) }
     else {
-        let result = try ControllerDiagnostics.shared.perform(request.action, mode: request.dryRun ? .dryRun : .live) { try run(request) }
+        let result = try ControllerDiagnostics.shared.perform(request.action, mode: request.dryRun ? .dryRun : .live) {
+            if ["lightingRead", "turboRead", "calibrationRead", "firmwareRead"].contains(request.action) {
+                return try ControllerSettingReadRetry.read(action: request.action) { try run(request) }
+            }
+            return try run(request)
+        }
         output(["ok": true, "result": result, "events": try object(ControllerDiagnostics.shared.snapshot())])
     }
 } catch {

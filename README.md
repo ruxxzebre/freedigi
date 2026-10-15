@@ -5,14 +5,16 @@ Configure your Flydigi Vader 5 Pro, inspect live inputs, and see exactly what th
 
 **Based on [ControlLab](https://github.com/dracinn/ControlLab), the original Swift controller app by dracinn.** FreeDigi reuses its controller protocol implementation and tests. The original MIT copyright and license are preserved, and the app includes an About credit. See [NOTICE](NOTICE) and [LICENSE](LICENSE).
 
-![FreeDigi overview](docs/freedigi-native-overview.png)
+![FreeDigi overview in the default dark theme](docs/freedigi-native-overview.png)
+
+[See the visual mapping editor](docs/freedigi-native-mapping.png)
 
 ## Status
 
 This is an early desktop preview. The Linux executable builds and the portable protocol and native state/safety tests pass. **The new Linux transport has not yet been tested against a physical controller.** The macOS transport adapts the original ControlLab IOKit session; a FreeDigi macOS build must be run and verified on a Mac.
 
-- Live physical input monitor, including the extra face and back buttons.
-- Read active profile; edit single-button mappings; temporary apply or persistent save.
+- Automatic controller discovery and live input monitoring on a controller diagram, including extra face and back buttons.
+- Automatically synchronized settings; visual single-button mapping editor; temporary apply or persistent save.
 - Profile backups, conflict checks, verified readback and the existing bounded retry logic.
 - Physical Turbo-button feature toggle and automatic stick-calibration toggle.
 - Controller solid-color lighting, brightness and off.
@@ -47,7 +49,7 @@ egui interface → Rust operation worker → Swift command service
                                                     └─ macOS: IOKit
 ```
 
-The protocol stays in Swift to preserve ControlLab's tested behavior. The Rust worker owns device selection, dry-run state, cached snapshots and process lifetimes. It pauses the input stream during configuration operations and resumes it afterward. The helper exits after each operation; monitoring keeps one helper alive. No background daemon or paid dependency is needed.
+The protocol stays in Swift to preserve ControlLab's tested behavior. One Rust worker owns device selection, automatic discovery/read freshness, dry-run state, cached snapshots and process lifetimes. Pages share this state, with one Refresh button for recovery. It pauses the input stream during configuration operations and resumes it afterward. The helper exits after each operation; monitoring keeps one helper alive. No background daemon or paid dependency is needed.
 
 The Chaiky gull, palette and **only explicitly selected Rust components** are
 vendored under `native/vendor/chaiky-theme`. Cargo default features are disabled;

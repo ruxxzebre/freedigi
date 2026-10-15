@@ -41,7 +41,7 @@ public struct LightingSnapshot: Codable, Sendable {
         return reports
     }
     public static func read(_ channel: any ControllerChannel) throws -> Self {
-        let identity = try ControllerProfileClient(channel: channel).identity()
+        let identity = try ControllerProfileClient(channel: channel, operation: "checking lighting identity").identity()
         try channel.send(Vader5Protocol.ledConfigReadCommand())
         var chunks: [Int: [UInt8]] = [:], total: Int?
         let deadline = ProcessInfo.processInfo.systemUptime + 5
@@ -54,7 +54,7 @@ public struct LightingSnapshot: Codable, Sendable {
         } while chunks.count != total
         let bytes = (0..<total!).flatMap { chunks[$0]! }
         guard Vader5Protocol.parseLightingConfiguration(bytes) != nil else { throw ControllerProtocolError.invalid("Unsupported lighting format.") }
-        guard try ControllerProfileClient(channel: channel).identity() == identity else { throw ControllerProtocolError.conflict }
+        guard try ControllerProfileClient(channel: channel, operation: "checking lighting identity").identity() == identity else { throw ControllerProtocolError.conflict }
         return .init(identity: identity, bytes: bytes)
     }
     public func apply(_ channel: any ControllerChannel, reports: [[UInt8]]) throws -> Self {

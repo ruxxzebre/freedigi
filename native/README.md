@@ -52,8 +52,14 @@ ControlLab protocol attribution: © 2026 dracinn, MIT; see root LICENSE and NOTI
 Dry run starts enabled on every launch. Hardware reads remain live. Writes need
 a previously read snapshot and run through the existing Swift retry/preflight/
 readback implementation. Failed or ambiguous operations invalidate their snapshot;
-read again before retrying. Live profile writes create a backup before applying.
-All device operations run on a worker thread. Monitoring pauses for configuration,
+the current page refreshes automatically before another apply is allowed. Live profile writes create a backup before applying.
+One shared worker discovers controllers, starts monitoring, caches settings and
+serializes all HID operations. Pages declare the settings they need: cached values
+refresh every 30 seconds while visible (firmware versions every 10 minutes).
+Failed reads back off; standalone lighting/Turbo/calibration/version reads also
+retry transient timeouts up to three times. Profile reads retain their five-attempt
+policy. Refresh forces discovery and fresh reads. Background refresh never
+replays a write. Monitoring pauses while the window is unfocused and for configuration,
 releases the interface and resumes afterward; it is not a disconnection indicator.
 Logs retain 200 entries and Copy report/Export report omit raw profile bytes.
 
@@ -77,3 +83,17 @@ The script uses at most eight compiler jobs by default. Set
 explicitly on a larger machine. The first build downloads/compiles dependencies;
 later builds reuse them. On Mac the ready-to-open result is
 `native/dist/FreeDigi.app`, alongside the distributable zip.
+
+## Interface and memory diagnostics
+
+Dark Chaiky colors are the default. The controller diagram is shared by live
+inputs and the mapping editor; selecting a physical button exposes its output
+choices. Mapping drafts survive background reads and are cleared when controller
+identity or profile slot changes. Nunito is embedded under the SIL Open Font
+License (see `assets/fonts` and packaged third-party notices).
+
+State snapshots share the bounded log buffer instead of copying it every frame.
+Input packets trigger repaints only on visible input pages while focused.
+Diagnostics includes font-atlas dimensions, texture allocations and image-loader
+cache size in Copy/Export report. These counters exclude OS/window buffers and
+graphics-driver allocations and do not equal Activity Monitor's process memory.

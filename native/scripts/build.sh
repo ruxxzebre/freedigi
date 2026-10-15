@@ -91,7 +91,7 @@ if [ "$platform" = macos ]; then
   # Keep a ready-to-open bundle; users do not need to extract the archive.
   ditto "$app" "$native_dir/dist/FreeDigi.app"
   ditto -c -k --sequesterRsrc --keepParent "$app" "native/dist/FreeDigi-macos-$arch.zip"
-  printf '\nOpen it with: open native/dist/FreeDigi.app\n' 
+  printf '\nOpen it with: open native/dist/FreeDigi.app\n'
 else
   strip --strip-unneeded "$bin/freedigi-service"
   cp desktop/assets/70-freedigi.rules native/assets/freedigi.png "$bin/"

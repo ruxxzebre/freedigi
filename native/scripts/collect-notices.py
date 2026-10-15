@@ -10,6 +10,8 @@ metadata = json.loads(subprocess.check_output([
 ]))
 print("FreeDigi bundles Rust dependencies and the Swift runtime.\n")
 print("Chaiky native theme, palette and gull: Chaiky project / Core shared theme.\n")
+print("\n=== Nunito font · SIL Open Font License 1.1 ===\n")
+print((native / "assets/fonts/OFL.txt").read_text())
 for package in sorted(metadata["packages"], key=lambda p: (p["name"], p["version"])):
     if package["source"] is None:
         continue

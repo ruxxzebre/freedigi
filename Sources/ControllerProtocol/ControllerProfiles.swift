@@ -168,12 +168,15 @@ public struct ControllerProfileFailure: Error, CustomStringConvertible, Sendable
     public let phase: String
     public let command: UInt8
     public let writesAttempted: Bool
+    var profileOperation: Bool = true
 
     public var description: String {
+        let detail = "Controller response timed out during \(phase) (command \(String(format: "0x%02X", command)))."
+        guard profileOperation else { return detail }
         let exposure = writesAttempted
             ? "Profile-write commands were sent; their result is not confirmed. Read the active profile before another write."
             : "No profile-write commands have been sent by this operation."
-        return "Controller response timed out during \(phase) (command \(String(format: "0x%02X", command))). \(exposure)"
+        return "\(detail) \(exposure)"
     }
 }
 
@@ -182,11 +185,16 @@ public struct ControllerProfileFailure: Error, CustomStringConvertible, Sendable
 /// ControllerProfileWriteRetry reconciles a fresh session before another attempt.
 public final class ControllerProfileClient {
     private let channel: any ControllerChannel
-    private var phase = "reading active profile"
+    private var phase: String
+    private let profileOperation: Bool
     public private(set) var writesAttempted = false
     public private(set) var saveAttempted = false
     public private(set) var saveAcknowledged = false
-    public init(channel: any ControllerChannel) { self.channel = channel }
+    public init(channel: any ControllerChannel, operation: String? = nil) {
+        self.channel = channel
+        self.phase = operation ?? "reading active profile"
+        self.profileOperation = operation == nil
+    }
 
     private func response(_ command: UInt8, timeout: TimeInterval = 2) throws -> [UInt8] {
         let start = ProcessInfo.processInfo.systemUptime
@@ -213,7 +221,7 @@ public final class ControllerProfileClient {
             ControllerDiagnostics.shared.record("Profile response", stage: "timeout",
                 message: "Expected \(String(format: "0x%02X", command)); \(unmatched) unmatched reports. Headers: \(headerSummary). No matching response arrived.",
                 elapsedMilliseconds: (ProcessInfo.processInfo.systemUptime - start) * 1000)
-            let failure = ControllerProfileFailure(phase: phase, command: command, writesAttempted: writesAttempted)
+            let failure = ControllerProfileFailure(phase: phase, command: command, writesAttempted: writesAttempted, profileOperation: profileOperation)
             ControllerDiagnostics.shared.record("Profile command", stage: "failed", message: failure.description)
             throw failure
         }

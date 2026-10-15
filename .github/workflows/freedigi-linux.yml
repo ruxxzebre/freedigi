@@ -24,7 +24,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             native/target
-          key: native-linux-${{ hashFiles('native/Cargo.lock', 'flake.lock') }}
+          key: native-linux-${{ hashFiles('native/Cargo.lock', 'native/Cargo.toml', 'flake.lock', 'rust-toolchain.toml') }}
       - name: Test and package native FreeDigi
         run: nix develop --command ./native/scripts/build.sh
       - uses: actions/upload-artifact@v4

@@ -33,18 +33,46 @@ The Go service boundary also cross-compiles for Windows amd64. This is a compile
 
 The native interface is in `native/`, using egui 0.33.3 with Glow. Wgpu is not
 enabled. Linux launch against the real Swift helper passed under Xvfb with Mesa
-software OpenGL; no controller was attached. Four native state tests cover
+software OpenGL; no controller was attached. Eight native state tests cover
 request authority, failed-write snapshot invalidation, dry-run preservation,
-profile draft identity/slot ownership and bounded diagnostic reports. Shared
+profile draft identity/slot ownership, visible-page freshness/backoff, accessible
+device selection, scoped errors and shared log storage. Shared
 Chaiky light/dark component smoke testing also passed. Independent review found
 and corrected the LED-off enum value and cross-profile draft carryover.
 
 Initial debug idle measurement at 1100×820 was 110 MiB PSS / 135 MiB RSS including
-the software graphics driver. Later idle samples fell to roughly 51 / 58 MiB
-as pages were reclaimed; these are preliminary measurements, not a promised
-budget or a macOS result. The previous Wails sample was 234 MiB aggregate PSS /
+the software graphics driver. Later lower resident-memory samples were affected by swapping;
+RSS/PSS alone must not be interpreted as an optimization. A subsequent sample
+had about 40.5 MiB SwapPss in addition to resident PSS. These are preliminary
+measurements, not a promised budget or a macOS result. The previous Wails sample was 234 MiB aggregate PSS /
 387 MiB summed RSS. Measurement environment and page residency affect comparison.
 
 Linux packaging and GitHub CI are being checked for the new native path. Mac
 compilation and actual controller interaction still require a Mac/controller.
 The existing Wails and original ControlLab source are preserved.
+
+### Automatic sync and memory follow-up
+
+78 portable Swift tests pass, including new regression checks for bounded setting
+read retries, non-retryable conflicts/uncertain writes, and lighting identity
+timeout wording. The profile client retains its existing write-exposure reporting
+for profile operations. Native tests pass in release mode.
+
+Confirmed allocation/repaint waste was removed: UI snapshots share the bounded
+log buffer, input events repaint only live-input pages while focused, and an
+unfocused window releases its monitoring helper. Diagnostics now reports font
+atlas dimensions, tracked texture bytes and image-loader cache bytes.
+
+The user's 121 MB macOS process-memory observation has not been reproduced here.
+Cocoa/OpenGL/Retina buffer costs remain a hypothesis; the changes above are not a
+claim of a measured macOS memory reduction. On Linux, include SwapPss from
+`/proc/PID/smaps_rollup` alongside PSS. On Mac, `vmmap -summary PID` can separate
+heap and graphics/window allocations more usefully than a single process total.
+
+The updated Linux package passes its bundled real-helper self-test and dry-run
+service checks. Dark overview/mapping screenshots were captured from the actual
+Linux app with the real helper and no controller attached. A separate simulated
+service exercised automatic discovery, first-page reads, cache reuse when
+navigating, and monitor/read handoff under an exclusive lock; it detected no
+overlapping configuration/monitor sessions. This is a lifecycle check, not
+physical-device evidence.

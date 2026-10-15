@@ -1,0 +1,5 @@
+Nunito Regular, SIL Open Font License 1.1 (see OFL.txt).
+Source: https://github.com/google-fonts-bower/nunito-bower
+Revision: 1c4961412df3d6e71012549c249d060839f2ee03
+File: Nunito-Regular.ttf
+Embedded locally; no runtime font download.
