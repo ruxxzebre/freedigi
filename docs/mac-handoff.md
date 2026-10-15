@@ -1,5 +1,9 @@
 # Mac build and device validation
 
+> Historical handoff for the original ControlLab Swift app. For the current
+> FreeDigi Rust/egui app, completed work and unresolved monitoring timeout, see
+> [the FreeDigi handoff](freedigi-handoff.md).
+
 The user built and opened revision `de74fc8` on a Mac and reported that connection
 and controller lighting work through the USB dongle. That does not establish
 profile persistence, calibration, firmware flashing or system-wide game input.
