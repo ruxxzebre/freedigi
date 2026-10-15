@@ -288,7 +288,8 @@ struct ControllerConfigurationView: View {
         HStack(alignment: .top, spacing: 16) {
             ConfigPanel(title: "Controller", icon: "power") {
                 ConfigPicker(title: "Controller sleep time", selection: profileBinding.sleepTime)
-                Toggle("Enable turbo function", isOn: profileBinding.turboEnabled)
+                Text("Use the Turbo button card above to change the controller’s setting.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Allow fast profile swap", isOn: profileBinding.fastSwap)
             }
             ConfigPanel(title: "Vibration", icon: "waveform.path") {

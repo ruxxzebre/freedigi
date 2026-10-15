@@ -101,6 +101,12 @@
 			"path" = "Sources/Vader5GUI/SpaceStationTheme.swift";
 			"sourceTree" = "SOURCE_ROOT";
 		};
+		"319849C4FC385C5981EA108A" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Sources/Vader5GUI/TurboButtonView.swift";
+			"sourceTree" = "SOURCE_ROOT";
+		};
 		"141156CA1A7E72000EB4A91E" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "5F8E8E87D5D4BCBF45B460DA";
@@ -156,6 +162,10 @@
 		"35464A2164C628A6811A4976" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "8D754B0A769701BBDBC6CEF8";
+		};
+		"23A1066012D164537EC93686" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "319849C4FC385C5981EA108A";
 		};
 		"A9185E5792E2A6521BFD6176" = {
 			"isa" = "PBXBuildFile";
@@ -503,6 +513,7 @@
 				"C5F82727F9DC434E731AAEAB",
 				"2B995AE20278E21F324BFB5D",
 				"35464A2164C628A6811A4976",
+				"23A1066012D164537EC93686",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -643,6 +654,7 @@
 				"F9286DA0AF51F8F35B44858F",
 				"405AE91DED7426A1D273F702",
 				"8D754B0A769701BBDBC6CEF8",
+				"319849C4FC385C5981EA108A",
 				"0643E8829E7F7962DB44753D",
 				"EDB3C362ED5C879C147ABD31",
 				"81A23986E1455A65CBD2855E",

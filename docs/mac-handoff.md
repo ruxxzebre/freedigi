@@ -157,7 +157,8 @@ or that it exhaustively describes the latest web release.
 | Feature | ControlLab hardware editor |
 | --- | --- |
 | Simple gamepad mappings, including M1–M4 and C/Z | Implemented, with staging, backup and readback |
-| Turbo, macros, keyboard/mouse outputs | Not implemented; existing custom mappings are preserved until explicitly replaced |
+| Physical Turbo button | Configuration → Turbo button: read support/status, stage on/off, preview or apply with readback verification |
+| Per-button turbo editor, macros, keyboard/mouse outputs | Not implemented; existing custom mappings are preserved until explicitly replaced |
 | Stick curves, dead zones, axis sensitivity and circularity | Advanced UI drafts only; not written to the controller |
 | Trigger travel ranges and detailed vibration settings | Advanced UI drafts only; basic grip-vibration enable is implemented |
 | Gyro output mapping, sensitivity and activation rules | Advanced UI drafts only; not written to the controller |
@@ -321,3 +322,32 @@ was not monitoring stays stopped. Firmware operations retain their explicit
 resume behavior. A failed fresh profile read clears the previous
 editable snapshot. These changes still require a Mac build and hardware check;
 portable tests cover lost ACKs/readbacks and reject unsafe recovery outcomes.
+
+### Physical Turbo-button switch
+
+Configuration → **Turbo button** → **Read Turbo setting** reads the global
+hardware flag independently of the active profile. Stage the switch, then use
+**Preview setting** with Dry run on or **Apply setting** with Dry run off.
+Applying rechecks controller identity and the last-read flag, checks the command
+acknowledgement, and reads back the result. It does not send profile-save commands.
+Reconnect and read again to establish persistence on the installed firmware.
+Unsupported firmware disables the switch. Failed writes are not automatically
+replayed; read again to establish the device state. Monitoring pauses during
+access and resumes after a verified write. Diagnostics records reads, staged
+changes, dry-run plans, verified results and failures.
+
+This enables the physical Turbo button's shortcuts; it does not enable rapid
+fire on every button or implement the advanced per-button turbo editor. Hold
+Turbo and press a target button to toggle that button's rapid fire once enabled.
+The former local-only global Turbo switch in Advanced drafts is replaced with
+a pointer to this live card.
+
+Protocol evidence: Space Station 4.2.0.9's renderer binds `turbo_mapping_title`
+to `mappingSwitchEnabled` and IPC `EnableMappingSwitch`. Engine 5.0.1.6's
+`ReadHardwareFunctionStatusCommandFactory` uses bit 3 of bytes 5 (supported)
+and 6 (enabled); `EnableMappingSwitchCommandFactory` writes NewXInput command
+`0x13`, subcommand `4`. Report-ID-free prefixes are `5a a5 13 04 04 01 1c`
+(enable) and `5a a5 13 04 04 00 1b` (disable), zero-padded to 32 bytes.
+Portable simulated-channel tests cover both vectors, unrelated flags,
+unsupported/stale devices, missing or mismatched ACKs, failed readback and dry-run
+planning. Physical-controller behavior and macOS UI still require Mac testing.

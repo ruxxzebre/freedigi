@@ -204,3 +204,29 @@ public enum Vader5Calibration {
         }
     }
 }
+
+public enum Vader5Turbo {
+    public static func preview(_ enabled: Bool, replacing snapshot: ControllerTurboSetting) throws {
+        let reports = try snapshot.reports(enabling: enabled)
+        ControllerDiagnostics.shared.write("Set Turbo button", mode: .dryRun, reports: reports,
+            details: "Enabled: \(enabled). Uses last-read support/identity; live execution rechecks them and verifies readback.") {}
+    }
+
+    public static func read() throws -> ControllerTurboSetting {
+        try ControllerDiagnostics.shared.perform("Read Turbo button") {
+            let result = try ControllerTurboClient(channel: ControllerHIDSession()).read()
+            ControllerDiagnostics.shared.record("Turbo button", stage: "read",
+                message: "Supported: \(result.supported); enabled: \(result.enabled).")
+            return result
+        }
+    }
+
+    public static func setEnabled(_ enabled: Bool, replacing snapshot: ControllerTurboSetting) throws -> ControllerTurboSetting {
+        try ControllerDiagnostics.shared.perform("Set Turbo button", details: "Enabled: \(enabled).") {
+            let result = try ControllerTurboClient(channel: ControllerHIDSession()).setEnabled(enabled, replacing: snapshot)
+            ControllerDiagnostics.shared.record("Turbo button", stage: "verified",
+                message: "Enabled: \(result.enabled). Controller readback matches the requested setting.")
+            return result
+        }
+    }
+}

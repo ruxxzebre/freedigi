@@ -87,6 +87,7 @@ let package = Package(
                 "DeviceProfilesView.swift",
                 "GameCompatibilityView.swift",
                 "CalibrationView.swift",
+                "TurboButtonView.swift",
                 "OperationLogView.swift",
                 "ControllerInputView.swift",
                 "DockFactoryLightingStore.swift",

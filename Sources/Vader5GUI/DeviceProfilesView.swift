@@ -75,6 +75,7 @@ struct DeviceProfilesView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
+                TurboButtonView(model: model)
                 CalibrationView(model: model)
                 DisclosureGroup("Advanced local drafts · not sent to the controller") {
                     ControllerConfigurationView(state: model.state)
