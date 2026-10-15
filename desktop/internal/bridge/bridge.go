@@ -26,18 +26,20 @@ type Log struct {
 	Message string `json:"message"`
 }
 type State struct {
-	Platform      string   `json:"platform"`
-	Devices       []Object `json:"devices"`
-	Path          string   `json:"path"`
-	DryRun        bool     `json:"dryRun"`
-	Monitoring    bool     `json:"monitoring"`
-	MonitorWanted bool     `json:"monitorWanted"`
-	Input         Object   `json:"input"`
-	Data          Object   `json:"data"`
-	Logs          []Log    `json:"logs"`
-	Busy          string   `json:"busy"`
-	Error         string   `json:"error"`
-	Build         string   `json:"build"`
+	PlatformSupported bool     `json:"platformSupported"`
+	PlatformMessage   string   `json:"platformMessage"`
+	Platform          string   `json:"platform"`
+	Devices           []Object `json:"devices"`
+	Path              string   `json:"path"`
+	DryRun            bool     `json:"dryRun"`
+	Monitoring        bool     `json:"monitoring"`
+	MonitorWanted     bool     `json:"monitorWanted"`
+	Input             Object   `json:"input"`
+	Data              Object   `json:"data"`
+	Logs              []Log    `json:"logs"`
+	Busy              string   `json:"busy"`
+	Error             string   `json:"error"`
+	Build             string   `json:"build"`
 }
 type Reply struct {
 	OK     bool            `json:"ok"`
@@ -58,14 +60,15 @@ type Service struct {
 }
 
 func New(helper, build string, emit func(string, any)) *Service {
-	return &Service{helper: helper, emit: emit, state: State{Devices: []Object{}, DryRun: true, Data: Object{}, Logs: []Log{}, Build: build, Platform: runtime.GOOS + "/" + runtime.GOARCH}}
+	supported, message := platformSupport(runtime.GOOS)
+	return &Service{helper: helper, emit: emit, state: State{PlatformSupported: supported, PlatformMessage: message, Devices: []Object{}, DryRun: true, Data: Object{}, Logs: []Log{}, Build: build, Platform: runtime.GOOS + "/" + runtime.GOARCH}}
 }
 func HelperPath() string {
 	if p := os.Getenv("FREEDIGI_SERVICE"); p != "" && filepath.IsAbs(p) {
 		return p
 	}
 	exe, _ := os.Executable()
-	return filepath.Join(filepath.Dir(exe), "freedigi-service")
+	return filepath.Join(filepath.Dir(exe), serviceExecutableName(runtime.GOOS))
 }
 func clone[T any](v T) T {
 	b, _ := json.Marshal(v)
@@ -89,6 +92,9 @@ func (s *Service) log(action, message string) {
 func (s *Service) invoke(request Object) (Reply, error) {
 	if s.runner != nil {
 		return s.runner(request)
+	}
+	if supported, message := platformSupport(runtime.GOOS); !supported {
+		return Reply{}, errors.New(message)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer cancel()
@@ -297,6 +303,9 @@ func (s *Service) Monitor(enabled bool) (State, error) {
 	return s.Status(), err
 }
 func (s *Service) startMonitor() error {
+	if supported, message := platformSupport(runtime.GOOS); !supported {
+		return errors.New(message)
+	}
 	s.mu.Lock()
 	path := s.state.Path
 	s.mu.Unlock()

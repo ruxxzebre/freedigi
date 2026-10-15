@@ -133,3 +133,17 @@ func TestMonitorFailureClearsRequestedState(t *testing.T) {
 	}
 	s.Close()
 }
+
+func TestPlatformGroundworkDoesNotAdvertiseWindowsHardware(t *testing.T) {
+	for _, platform := range []string{"linux", "darwin"} {
+		if ok, _ := platformSupport(platform); !ok {
+			t.Fatalf("lost support for %s", platform)
+		}
+	}
+	if ok, message := platformSupport("windows"); ok || !strings.Contains(message, "not implemented") {
+		t.Fatal("Windows hardware support was advertised")
+	}
+	if serviceExecutableName("windows") != "freedigi-service.exe" || serviceExecutableName("darwin") != "freedigi-service" {
+		t.Fatal("incorrect service executable suffix")
+	}
+}

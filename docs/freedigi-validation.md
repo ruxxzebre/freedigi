@@ -5,7 +5,7 @@ Validated on a Linux amd64 Ubuntu 24.04 host with Swift 6.0.3, Go 1.26.2, Node 2
 ## Completed checks
 
 - 75 Swift tests: the 70 existing portable protocol tests plus five tests for HID descriptor/report framing, independent input buttons and lighting plans.
-- Seven Go service-boundary tests under the race detector: authoritative dry-run state, cached snapshot ownership, invalidation after ambiguous writes, serialization, device-switch isolation, missing-helper errors, monitor-failure state and bounded diagnostics.
+- Eight Go service-boundary tests under the race detector: authoritative dry-run state, cached snapshot ownership, invalidation after ambiguous writes, serialization, device-switch isolation, missing-helper errors, monitor-failure state, platform policy and bounded diagnostics.
 - Real Swift executable: profile, Turbo, calibration and lighting previews succeed without any device path; corresponding live requests fail without a device.
 - TypeScript check and production React build.
 - Two Playwright interaction tests: disconnected/browser-preview state; full sidebar hit areas; visible upstream credit; read-before-edit; multiple staged mappings; dry runs retain edits; verified live-result handling clears them. The mapping test uses a simulated service and is not a hardware test.
@@ -25,3 +25,5 @@ This host used software rendering at 1280×900; this is not a macOS measurement 
 - Live hardware performance, latencies and behavior in games.
 
 No firmware flashing, Bluetooth configuration, dock lighting, press-to-map, advanced mapping editors or virtual gamepad output is exposed in this preview. Reusing protocol tests does not establish hardware compatibility. The existing ControlLab Swift app remains in the repository.
+
+The Go service boundary also cross-compiles for Windows amd64. This is a compile-only check; no Windows app or HID implementation is provided.

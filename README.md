@@ -21,6 +21,8 @@ This is an early desktop preview. The Linux executable builds and the portable p
 
 **Not included in this preview:** firmware flashing, Bluetooth configuration, macro/combo/rapid-fire editors, dock lighting, press-to-map, and virtual gamepad output. Existing advanced profile bytes are preserved. This app does not change how games or macOS recognize the dongle, and does not remove Apple's virtual-HID entitlement restriction.
 
+Windows has [minimal groundwork](docs/freedigi-windows.md) only; no Windows controller backend or release is available yet.
+
 The original Swift app and its existing features remain available in this repository; see [the ControlLab documentation](CONTROLLAB.md). FreeDigi is not yet feature-complete relative to it.
 
 ## Download and build

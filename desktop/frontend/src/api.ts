@@ -24,6 +24,8 @@ export type Data = {
   backup?: string;
 };
 export type State = {
+  platformSupported: boolean;
+  platformMessage: string;
   devices: {
     path: string;
     name: string;
@@ -71,6 +73,8 @@ declare global {
 }
 export const native = !!window.go?.main?.App;
 export const initial: State = {
+  platformSupported: true,
+  platformMessage: "",
   devices: [],
   path: "",
   dryRun: true,

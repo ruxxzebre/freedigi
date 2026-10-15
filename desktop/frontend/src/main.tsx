@@ -248,6 +248,12 @@ function App() {
             </div>
             {topAction}
           </div>
+          {native && state.platformSupported === false && (
+            <div className="banner">
+              <Info size={17} />
+              {state.platformMessage}
+            </div>
+          )}
           {!native && (
             <div className="banner">
               <Info size={17} />
