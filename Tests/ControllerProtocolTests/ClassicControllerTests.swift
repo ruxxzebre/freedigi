@@ -20,13 +20,17 @@ private final class ClassicMock: ControllerChannel {
     var sent: [[UInt8]] = [], queued: [[UInt8]] = []
     var failAck = false, wrongAck = false, mismatchReadback = false, wrongVersion = false
     var slotQuery = true
+    var address: [UInt8] = [1, 2, 3, 4]
+    var infoQueries = 0
+    var beforeInfo: ((Int) -> Void)?
     var incoming = [UInt8]()
     func send(_ report: [UInt8]) throws {
         sent.append(report)
         var reply = [UInt8](repeating: 0, count: 32); reply[0] = 4
         switch report[1] {
         case 0xec:
-            reply[3] = model; reply[5...8] = [1, 2, 3, 4]; reply[9] = 0x30; reply[10] = 0x68
+            infoQueries += 1; beforeInfo?(infoQueries)
+            reply[3] = model; reply.replaceSubrange(5...8, with: address); reply[9] = 0x30; reply[10] = 0x68
             reply[13] = 1; reply[15] = 0xec; queued.append(reply)
         case 0xeb where report[2] == 0xa0:
             if slotQuery { reply[1] = 0xeb; reply[2] = 0xa0; reply[3] = slot; queued.append(reply) }
@@ -58,6 +62,35 @@ private final class ClassicMock: ControllerChannel {
 }
 
 final class ClassicControllerTests: XCTestCase {
+    func testClassicMonitorHandshakeUsesOnlyClassicIdentityAndRejectsOtherModels() throws {
+        let channel = ClassicMock()
+        let result = try ControllerMonitorStartup.handshake(waitBeforeRetry: {},
+            identify: { (channel: ClassicMock) in try ClassicControllerClient(channel: channel).info().identity }, open: { channel })
+        XCTAssertEqual(result?.identity.deviceID, 85)
+        XCTAssertEqual(channel.sent, [ClassicControllerProtocol.command(0xec)])
+        channel.model = 84
+        var attempts = 0
+        XCTAssertThrowsError(try ControllerMonitorStartup.handshake(waitBeforeRetry: {},
+            identify: { (channel: ClassicMock) in try ClassicControllerClient(channel: channel).info().identity },
+            open: { attempts += 1; return channel }))
+        XCTAssertEqual(attempts, 1)
+        XCTAssertTrue(channel.mutations.isEmpty)
+    }
+    func testControllerOrSlotChangedImmediatelyBeforeWriteNeverMutates() throws {
+        for change in 0..<3 {
+            let channel = ClassicMock(), client = ClassicControllerClient(channel: channel)
+            let snapshot = try client.readActive()
+            var edited = try snapshot.profile(); try edited.map(18, to: 4)
+            channel.beforeInfo = { [weak channel] query in
+                guard query == 5 else { return }
+                if change == 0 { channel?.address = [5, 6, 7, 8] }
+                if change == 1 { channel?.model = 91 }
+                if change == 2 { channel?.slot = 2 }
+            }
+            XCTAssertThrowsError(try client.apply(edited, replacing: snapshot, persist: true))
+            XCTAssertTrue(channel.mutations.isEmpty, "A changed controller or slot must fail before the write header")
+        }
+    }
     func testIdentityFirmwareForeignAndLiveFrameRejection() throws {
         let channel = ClassicMock(), client = ClassicControllerClient(channel: ClassicMock())
         XCTAssertEqual(try client.info().firmware, "6.8.3.0")

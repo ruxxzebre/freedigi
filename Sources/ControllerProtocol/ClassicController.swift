@@ -44,7 +44,14 @@ public enum ClassicControllerProtocol {
         let count = bytes.count / 10
         var header: [UInt8] = lighting ? [5, 0xe7, slot, UInt8(count)] : [5, 0xea, UInt8(count), 0xa0, slot]
         header += Array(repeating: 0, count: 14 - header.count)
-        return [header] + (0..<count).map { [5, lighting ? 0x33 : 0x22] + Array(bytes[($0 * 10)..<($0 * 10 + 10)]) + [0xa0, UInt8($0)] }
+        let command: UInt8 = lighting ? 0x33 : 0x22
+        let parcels: [[UInt8]] = (0..<count).map { index in
+            var packet: [UInt8] = [5, command]
+            packet += bytes[(index * 10)..<(index * 10 + 10)]
+            packet += [0xa0, UInt8(index)]
+            return packet
+        }
+        return [header] + parcels
     }
     public static func profilePlan(_ edited: ControllerProfile, replacing snapshot: ControllerProfileSnapshot, persist: Bool) throws -> [[UInt8]] {
         try snapshot.identity.requireVader4()
@@ -187,7 +194,9 @@ public final class ClassicControllerClient {
         guard try activeSlot() == slot, try info().identity == identity else { throw ControllerProtocolError.conflict }
         return .init(identity: identity, slot: slot, profile: profile)
     }
-    public func write(_ packets: [[UInt8]]) throws {
+    public func write(_ packets: [[UInt8]], identity: ControllerIdentity) throws {
+        writesAttempted = false
+        try identity.requireVader4()
         guard let header = packets.first, header.count == 14, [0xea, 0xe7].contains(header[1]),
               packets.allSatisfy({ $0.count == 14 }) else { throw ControllerProtocolError.invalid("Invalid classic write plan.") }
         let lighting = header[1] == 0xe7, slot = header[header[1] == 0xe7 ? 2 : 4]
@@ -195,7 +204,11 @@ public final class ClassicControllerClient {
         guard try ClassicControllerProtocol.packets(blob, slot: slot, lighting: lighting) == packets else {
             throw ControllerProtocolError.invalid("Invalid classic write parcels.")
         }
-        _ = try info() // Every public write entry point authenticates the model.
+        // A receiver can reconnect to another supported controller between the
+        // snapshot read and this query. Model membership alone is insufficient.
+        guard try info().identity == identity, try activeSlot() == slot else {
+            throw ControllerProtocolError.conflict
+        }
         ControllerDiagnostics.shared.record("Classic write", stage: "started", message: "Writing \(packets.count - 1) \(lighting ? "lighting" : "profile") parcels to slot \(slot + 1); indexed acknowledgements required.")
         for packet in packets {
             writesAttempted = true
@@ -204,10 +217,11 @@ public final class ClassicControllerClient {
         }
     }
     public func apply(_ edited: ControllerProfile, replacing snapshot: ControllerProfileSnapshot, persist: Bool) throws -> ControllerProfileSnapshot {
+        writesAttempted = false
         let plan = try ClassicControllerProtocol.profilePlan(edited, replacing: snapshot, persist: persist)
         guard try readActive() == snapshot else { throw ControllerProtocolError.conflict }
         do {
-            try write(Array(plan.prefix(edited.bytes.count / 10 + 1)))
+            try write(Array(plan.prefix(edited.bytes.count / 10 + 1)), identity: snapshot.identity)
             guard try readActive() == ControllerProfileSnapshot(identity: snapshot.identity, slot: snapshot.slot, profile: edited) else { throw ControllerProtocolError.verification }
             var expected = edited
             if persist {
@@ -226,6 +240,7 @@ public final class ClassicControllerClient {
             guard result == ControllerProfileSnapshot(identity: snapshot.identity, slot: snapshot.slot, profile: expected) else { throw ControllerProtocolError.verification }
             return result
         } catch ControllerProtocolError.timeout {
+            guard writesAttempted else { throw ControllerProtocolError.timeout }
             throw ControllerProtocolError.invalid("Classic write timed out; its result is uncertain. No writes were replayed. Read the profile before another apply.")
         }
     }

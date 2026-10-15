@@ -72,8 +72,8 @@ func monitor(_ request: Request) throws {
             return try ControllerProfileClient(channel: channel, operation: "starting input monitoring").identity()
         }, open: { try HIDChannel(path: request.path) }) else { return }
     if !channel.isClassic {
-    for cmd: UInt8 in [0xa1, 2, 4] { try channel.send(ControllerCommand.frame(cmd)) }
-    try channel.send(ControllerCommand.frame(0x11, payload: [255, 1, 255, 255, 255]))
+        for cmd: UInt8 in [0xa1, 2, 4] { try channel.send(ControllerCommand.frame(cmd)) }
+        try channel.send(ControllerCommand.frame(0x11, payload: [255, 1, 255, 255, 255]))
     }
     defer { if !channel.isClassic { try? channel.send(ControllerCommand.frame(0x11, payload: [255, 0, 255, 255, 255])) } }
     output(["event": "monitor", "running": true])

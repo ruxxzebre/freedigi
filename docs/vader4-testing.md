@@ -16,6 +16,7 @@ This is the first hardware validation of FreeDigi's experimental Vader 4 Pro sup
 - Sticks/triggers: check centering, direction and full travel. Move both sticks while holding an extra button.
 - Mapping: the active profile and current mappings load. Compare them with the controller's existing configuration. Change the active profile on the controller and refresh; confirm the displayed slot changes.
 - Lighting: the existing brightness/color loads. Firmware: the main version appears. Feature switches without a Vader 4 implementation should be unavailable.
+- Stage a lighting change without applying it, switch profiles on the controller, then refresh. The controls should load the new profile's lighting and discard the old profile's draft. An ordinary refresh of the same profile should retain an unsaved draft.
 
 If a read fails, export the Diagnostics report and note the page, connection type and exact error. Keep Dry run enabled until the reads succeed. An unsupported profile-format error is useful evidence; record it instead of trying to force a write.
 

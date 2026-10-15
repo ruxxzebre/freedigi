@@ -226,17 +226,11 @@ impl App {
                 );
             }
         }
-        if !self.lighting_snapshot.is_null()
-            && !state.data["lighting"].is_null()
-            && self.lighting_snapshot["identity"] != state.data["lighting"]["identity"]
-        {
-            self.lighting_dirty = false;
-        }
-        if !self.lighting_dirty
-            && !state.data["lighting"].is_null()
-            && self.lighting_snapshot != state.data["lighting"]
-        {
-            self.lighting_snapshot = state.data["lighting"].clone();
+        if accept_lighting_snapshot(
+            &mut self.lighting_snapshot,
+            &mut self.lighting_dirty,
+            &state.data["lighting"],
+        ) {
             if let Some(hex) = state.data["color"].as_str()
                 && let Ok(c) = Color32::from_hex(hex)
             {
@@ -373,6 +367,23 @@ fn reconcile_draft(staged: &mut BTreeMap<String, usize>, context: &mut Value, sn
     }
     *context = next;
 }
+// Preserve a draft while rereading its owner, but reload controls when a different
+// controller or classic profile becomes active. Vader 5 lighting has no slot.
+fn accept_lighting_snapshot(previous: &mut Value, dirty: &mut bool, current: &Value) -> bool {
+    if current.is_null() {
+        return false;
+    }
+    if !previous.is_null()
+        && (previous["identity"] != current["identity"] || previous["slot"] != current["slot"])
+    {
+        *dirty = false;
+    }
+    if !*dirty && *previous != *current {
+        *previous = current.clone();
+        return true;
+    }
+    false
+}
 fn rendering_summary(ctx: &egui::Context) -> String {
     let atlas = ctx.fonts(|f| f.font_image_size());
     let manager = ctx.tex_manager();
@@ -411,6 +422,34 @@ fn diagnostic_report(ctx: &egui::Context, state: &State) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn lighting_drafts_survive_rereads_but_do_not_follow_profile_changes() {
+        for slot in [json!(0), Value::Null] {
+            let first = json!({"identity":{"address":[1,2,3,4]},"slot":slot,"bytes":[1]});
+            let mut previous = Value::Null;
+            let mut dirty = false;
+            assert!(accept_lighting_snapshot(&mut previous, &mut dirty, &first));
+            dirty = true;
+            assert!(!accept_lighting_snapshot(
+                &mut previous,
+                &mut dirty,
+                &Value::Null
+            ));
+            let mut next = first.clone();
+            next["bytes"] = json!([2]);
+            assert!(!accept_lighting_snapshot(&mut previous, &mut dirty, &next));
+            assert!(dirty);
+            assert_eq!(previous, first);
+            if slot.is_null() {
+                next["identity"]["address"] = json!([5, 6, 7, 8]);
+            } else {
+                next["slot"] = json!(1);
+            }
+            assert!(accept_lighting_snapshot(&mut previous, &mut dirty, &next));
+            assert!(!dirty);
+            assert_eq!(previous, next);
+        }
+    }
     #[test]
     fn mapping_drafts_follow_identity_and_slot_but_survive_read_retry() {
         let first = json!({"identity":{"address":[1,2,3,4]},"slot":0});

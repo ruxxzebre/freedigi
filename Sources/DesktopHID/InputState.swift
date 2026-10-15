@@ -112,10 +112,16 @@ public struct LightingSnapshot: Codable, Sendable {
             guard !reports.isEmpty, reports.allSatisfy({ $0.count == 14 }) else { throw ControllerProtocolError.invalid("Malformed classic lighting packets.") }
             let expected = reports.dropFirst().flatMap { Array($0[2..<12]) }
             guard try ClassicControllerProtocol.packets(expected, slot: slot, lighting: true) == reports else { throw ControllerProtocolError.invalid("Invalid classic lighting plan.") }
-            try ClassicControllerClient(channel: channel).write(reports)
-            let result = try Self.readClassic(channel)
-            guard result.identity == identity, result.slot == slot, result.bytes == expected else { throw ControllerProtocolError.verification }
-            return result
+            let client = ClassicControllerClient(channel: channel)
+            do {
+                try client.write(reports, identity: identity)
+                let result = try Self.readClassic(channel)
+                guard result.identity == identity, result.slot == slot, result.bytes == expected else { throw ControllerProtocolError.verification }
+                return result
+            } catch ControllerProtocolError.timeout {
+                guard client.writesAttempted else { throw ControllerProtocolError.timeout }
+                throw ControllerProtocolError.invalid("Classic lighting write timed out; its result is uncertain. No writes were replayed. Read lighting before another apply.")
+            }
         }
         let current = try Self.read(channel)
         guard current.identity == identity, current.bytes == bytes else { throw ControllerProtocolError.conflict }

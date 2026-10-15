@@ -55,6 +55,33 @@ final class TransportTests: XCTestCase {
 }
 
 extension TransportTests {
+    #if os(Linux)
+    func testDiscoveryRequiresKnownUSBIdentityAndConfigurationCollection() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let classic: [UInt8] = [0x06, 0xa0, 0xff, 0x85, 5, 0x75, 8, 0x95, 63, 0x91, 2, 0x85, 4, 0x81, 2]
+        let candidates: [(String, String, [UInt8])] = [
+            ("hidraw0", "000004B4:00002412", classic),
+            ("hidraw1", "000037D7:00002401", numbered),
+            ("hidraw2", "000004B4:00002412", numbered),
+            ("hidraw3", "000004B4:00002413", classic),
+            ("hidraw4", "00001234:00002412", classic),
+            ("hidraw5", "000004B4:00002412", [0x06, 0xef, 0xff] + Array(classic.dropFirst(3))),
+        ]
+        for (name, id, descriptor) in candidates {
+            let device = root.appendingPathComponent(name).appendingPathComponent("device")
+            try FileManager.default.createDirectory(at: device, withIntermediateDirectories: true)
+            try Data("HID_ID=0003:\(id)\nHID_NAME=Flydigi test\n".utf8).write(to: device.appendingPathComponent("uevent"))
+            try Data(descriptor).write(to: device.appendingPathComponent("report_descriptor"))
+        }
+        let devices = HIDDevice.enumerate(root: root.path)
+        XCTAssertEqual(devices.map(\.path), ["/dev/hidraw0", "/dev/hidraw1"])
+        XCTAssertEqual(devices.map(\.isClassic), [true, false])
+        XCTAssertEqual(devices.map(\.product), ["2412", "2401"])
+    }
+    #endif
+
     func testClassicNumberedDescriptorDoesNotDuplicateReportID() throws {
         let descriptor: [UInt8] = [0x06, 0xa0, 0xff, 0x85, 5, 0x75, 8, 0x95, 31, 0x91, 2, 0x85, 4, 0x81, 2]
         let layout = try HIDLayout.parse(descriptor, isClassic: true)

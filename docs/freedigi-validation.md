@@ -4,9 +4,15 @@ Validated on a Linux amd64 Ubuntu 24.04 host with Swift 6.0.3, Go 1.26.2, Node 2
 
 ## Experimental Vader 4 changes (2026-10-15)
 
-On macOS, `FREEDIGI_BUILD=1 swift test` passes the portable protocol and desktop transport suites, including classic identity rejection, exact v3.0/v3.1 blob assembly, reordered/duplicate/conflicting/missing parcels, indexed ACK matching, stale snapshot rejection, temporary versus persistent sequencing, little-endian version save, full readback, no automatic write replay, numbered HID framing, live C/Z/M1–M4 inputs and percent-RGB lighting preservation. These use synthetic reports and mock channels, not captured Vader 4 sessions.
+Completion checks on Linux amd64 / Ubuntu 24.04 with Swift 6.0.3 and Rust 1.97.0:
 
-The real service dry-run integration checks cover both classic profile layouts and lighting, plus foreign-model and unsupported Turbo/calibration rejection. The Linux descriptor logic is exercised through pure framing tests on macOS; Linux hidraw discovery and I/O still require an actual Linux hardware run.
+- `FREEDIGI_BUILD=1 swift test -j 4`: 99 tests passed. Coverage includes classic identity rejection, exact v3.0/v3.1 blob assembly, reordered/duplicate/conflicting/missing parcels, indexed ACK matching, stale snapshot rejection, temporary versus persistent sequencing, little-endian version save, complete profile and lighting readback, and no automatic write replay. Discovery uses synthetic Linux sysfs entries to check USB identities, report IDs and usage pages. Classic monitor startup, live C/Z/M1–M4 inputs and percent-RGB lighting preservation are also covered.
+- `cargo test --locked --manifest-path native/Cargo.toml -j 4`: 14 tests passed, including retaining lighting drafts during rereads and discarding them when the active classic profile or controller changes.
+- Rust Clippy with `-D warnings` and formatting checks passed.
+- The real helper's `native/scripts/check-service.py` checks passed: previews for both classic profile layouts and lighting, foreign-model and unsupported Turbo/calibration rejection, and live requests rejected without a device path.
+- All 62 Swift source/test files passed syntax parsing, including macOS-only code. This is not macOS type checking or linking; the macOS app and legacy `Vader5CoreTests` were not rerun on this Linux host.
+
+The WIP packet-builder expression failed to compile with Swift 6.0.3 and was split into typed steps. A regression reproduced writes reaching a different supported controller or a changed slot after snapshot validation; the final pre-write check now compares the full identity and active slot before sending the header. Lighting timeout messages distinguish uncertain writes from read-only failures. These checks use synthetic reports and mock channels, not captured Vader 4 sessions. No physical settings were changed.
 
 **No physical Vader 4 has been tested.** The shared classic protocol documentation predominantly concerns Apex 4; DInput slot reply variants, write headers, LED off behavior and save persistence need the [friend's hardware checklist](vader4-testing.md). Current support accepts only exact 790-byte v3.0/840-byte v3.1 profiles and 500-byte v2.0 lighting. It rejects unknown versions and never silently truncates blobs. A 40 ms bounded receive window checks trailing parcels; real device timing remains to be measured.
 
