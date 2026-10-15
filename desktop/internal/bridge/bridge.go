@@ -288,6 +288,11 @@ func (s *Service) Monitor(enabled bool) (State, error) {
 	var err error
 	if enabled {
 		err = s.startMonitor()
+		if err != nil {
+			s.mu.Lock()
+			s.state.MonitorWanted = false
+			s.mu.Unlock()
+		}
 	}
 	return s.Status(), err
 }
@@ -315,6 +320,7 @@ func (s *Service) startMonitor() error {
 	done := make(chan struct{})
 	s.mu.Lock()
 	s.process = cmd
+	s.state.MonitorWanted = true
 	s.stdin = stdin
 	s.done = done
 	s.mu.Unlock()
@@ -356,6 +362,7 @@ func (s *Service) startMonitor() error {
 		stdin.Close()
 		s.mu.Lock()
 		s.state.Monitoring = false
+		s.state.MonitorWanted = false
 		s.state.Input = nil
 		s.mu.Unlock()
 		if waitErr != nil {

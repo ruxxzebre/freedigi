@@ -2,6 +2,8 @@ package bridge
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -103,4 +105,31 @@ func TestReportOmitsRawSnapshotsAndLogsAreBounded(t *testing.T) {
 	if _, ok := s.Status().Data["snapshot"]; !ok {
 		t.Fatal("report modified live snapshot")
 	}
+}
+
+func TestMonitorFailureClearsRequestedState(t *testing.T) {
+	s := testService()
+	if _, err := s.Monitor(true); err == nil {
+		t.Fatal("missing helper should fail")
+	}
+	if s.Status().MonitorWanted {
+		t.Fatal("failed start still requested")
+	}
+	helper := filepath.Join(t.TempDir(), "helper")
+	if err := os.WriteFile(helper, []byte("#!/bin/sh\nprintf '%s\\n' '{\"ok\":false,\"error\":\"Controller disconnected\"}'\nexit 1\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	s.helper = helper
+	if _, err := s.Monitor(true); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Lock()
+	done := s.done
+	s.mu.Unlock()
+	<-done
+	state := s.Status()
+	if state.MonitorWanted || state.Monitoring || !strings.Contains(state.Error, "disconnected") {
+		t.Fatalf("incorrect monitor failure state: %+v", state)
+	}
+	s.Close()
 }
