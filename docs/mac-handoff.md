@@ -351,3 +351,12 @@ and 6 (enabled); `EnableMappingSwitchCommandFactory` writes NewXInput command
 Portable simulated-channel tests cover both vectors, unrelated flags,
 unsupported/stale devices, missing or mismatched ACKs, failed readback and dry-run
 planning. Physical-controller behavior and macOS UI still require Mac testing.
+
+Turbo Apply now identifies timeouts by phase and command: pre-write checks,
+write acknowledgement, or verification. It states whether a write was attempted.
+A timeout after sending the Turbo command triggers one read-only recovery check;
+success requires matching controller identity, advertised support and requested
+state. The write is never repeated. A failed recovery remains unverified, with
+both the original timeout and recovery details in Diagnostics. This covers a
+lost acknowledgement or transient verification response; it does not establish
+which response was lost on any particular physical controller.

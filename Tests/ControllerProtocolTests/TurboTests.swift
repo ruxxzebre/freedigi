@@ -44,17 +44,62 @@ final class TurboTests: XCTestCase {
         }
     }
 
-    func testMissingAckWrongSubcommandAndFailedReadbackDoNotRetry() throws {
+    func testMissingAckOrWrongSubcommandRecoversByReadingWithoutRewriting() throws {
+        for wrongSubcommand in [false, true] {
+            let channel = TurboController()
+            let client = ControllerTurboClient(channel: channel)
+            let before = try client.read()
+            channel.ack = wrongSubcommand
+            channel.wrongSubcommand = wrongSubcommand
+            XCTAssertTrue(try client.setEnabled(true, replacing: before).enabled)
+            XCTAssertEqual(channel.writes.count, 1)
+        }
+    }
+
+    func testLostVerificationReadRecoversWithoutRewriting() throws {
+        let channel = TurboController()
+        let client = ControllerTurboClient(channel: channel)
+        let before = try client.read()
+        channel.dropStatusAfterWrite = 1
+        XCTAssertTrue(try client.setEnabled(true, replacing: before).enabled)
+        XCTAssertEqual(channel.writes.count, 1)
+    }
+
+    func testRecoveryDoesNotClaimSuccessForUnchangedOrDifferentController() throws {
         for scenario in 0..<3 {
             let channel = TurboController()
             let client = ControllerTurboClient(channel: channel)
             let before = try client.read()
-            channel.ack = scenario != 0
-            channel.wrongSubcommand = scenario == 1
-            channel.acceptWrite = scenario != 2
+            channel.ack = false
+            channel.acceptWrite = scenario != 0
+            channel.changeIdentityAfterWrite = scenario == 1
+            channel.dropStatusAfterWrite = scenario == 2 ? 10 : 0
             XCTAssertThrowsError(try client.setEnabled(true, replacing: before))
             XCTAssertEqual(channel.writes.count, 1)
         }
+    }
+
+    func testReadbackMismatchWithAckDoesNotClaimSuccess() throws {
+        let channel = TurboController()
+        let client = ControllerTurboClient(channel: channel)
+        let before = try client.read()
+        channel.acceptWrite = false
+        XCTAssertThrowsError(try client.setEnabled(true, replacing: before))
+        XCTAssertEqual(channel.writes.count, 1)
+    }
+
+    func testTimeoutBeforeWriteNamesPhaseAndDoesNotMutate() throws {
+        let channel = TurboController()
+        let client = ControllerTurboClient(channel: channel)
+        let before = try client.read()
+        channel.suppressStatus = true
+        XCTAssertThrowsError(try client.setEnabled(true, replacing: before)) { error in
+            let message = String(describing: error)
+            XCTAssertTrue(message.contains("before writing"), message)
+            XCTAssertTrue(message.contains("0x03"), message)
+            XCTAssertTrue(message.contains("No Turbo-setting write"), message)
+        }
+        XCTAssertTrue(channel.writes.isEmpty)
     }
 
     func testTruncatedStatusFailsAndUnchangedSettingDoesNotWrite() throws {
@@ -70,6 +115,8 @@ final class TurboTests: XCTestCase {
 
 private final class TurboController: ControllerChannel {
     var supported = true, ack = true, acceptWrite = true, wrongSubcommand = false, truncated = false
+    var suppressStatus = false, changeIdentityAfterWrite = false
+    var dropStatusAfterWrite = 0
     var deviceID: UInt8 = 130
     var flags: UInt8 = 0x85
     var writes: [[UInt8]] = []
@@ -80,10 +127,13 @@ private final class TurboController: ControllerChannel {
         case 1:
             queue.append([0x5a, 0xa5, 1, 1, 0, deviceID, 2, 1, 2, 3, 4] + Array(repeating: 0, count: 21))
         case 3:
+            if suppressStatus { return }
+            if !writes.isEmpty, dropStatusAfterWrite > 0 { dropStatusAfterWrite -= 1; return }
             let status: [UInt8] = [0x5a, 0xa5, 3, 1, 0, supported ? 0xff : 0xf7, flags, 0, 0, 0, 0, 0, 0]
             queue.append(truncated ? Array(status.prefix(7)) : status)
         case 0x13:
             writes.append(report)
+            if changeIdentityAfterWrite { deviceID = 144 }
             if acceptWrite { flags = (flags & ~0x08) | (report[5] == 1 ? 0x08 : 0) }
             queue.append([0, 1, 2, 3, 4]) // unrelated live input
             if ack { queue.append([0x5a, 0xa5, 0x13, 1, 0, wrongSubcommand ? 6 : 4]) }
