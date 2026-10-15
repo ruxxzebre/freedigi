@@ -27,3 +27,24 @@ This host used software rendering at 1280×900; this is not a macOS measurement 
 No firmware flashing, Bluetooth configuration, dock lighting, press-to-map, advanced mapping editors or virtual gamepad output is exposed in this preview. Reusing protocol tests does not establish hardware compatibility. The existing ControlLab Swift app remains in the repository.
 
 The Go service boundary also cross-compiles for Windows amd64. This is a compile-only check; no Windows app or HID implementation is provided.
+
+
+## Native egui preview (2026-10-15)
+
+The native interface is in `native/`, using egui 0.33.3 with Glow. Wgpu is not
+enabled. Linux launch against the real Swift helper passed under Xvfb with Mesa
+software OpenGL; no controller was attached. Four native state tests cover
+request authority, failed-write snapshot invalidation, dry-run preservation,
+profile draft identity/slot ownership and bounded diagnostic reports. Shared
+Chaiky light/dark component smoke testing also passed. Independent review found
+and corrected the LED-off enum value and cross-profile draft carryover.
+
+Initial debug idle measurement at 1100×820 was 110 MiB PSS / 135 MiB RSS including
+the software graphics driver. Later idle samples fell to roughly 51 / 58 MiB
+as pages were reclaimed; these are preliminary measurements, not a promised
+budget or a macOS result. The previous Wails sample was 234 MiB aggregate PSS /
+387 MiB summed RSS. Measurement environment and page residency affect comparison.
+
+Linux packaging and GitHub CI are being checked for the new native path. Mac
+compilation and actual controller interaction still require a Mac/controller.
+The existing Wails and original ControlLab source are preserved.

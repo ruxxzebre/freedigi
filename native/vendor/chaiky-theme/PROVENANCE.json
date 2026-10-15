@@ -1,0 +1,51 @@
+{
+  "source": "Chaiky Core / js/packages/theme",
+  "revision": "2e57c4b1fe4be08272bbcdd42bd027f56a9d8ee4",
+  "uncommitted_source": false,
+  "selected_components": [
+    "badge",
+    "button",
+    "card",
+    "empty",
+    "mascot",
+    "navigation",
+    "status",
+    "toggle"
+  ],
+  "included_components": [
+    "badge",
+    "button",
+    "card",
+    "empty",
+    "mascot",
+    "navigation",
+    "status",
+    "toggle"
+  ],
+  "source_sha256": {
+    "rust/lib.rs": "25930f9c20586a491ab47e0de12632612834d4529596338dabfff2f32dd5df4d",
+    "palette.json": "2e36af1fcec4148e4e3029ed2e5c576769171ee183fee690c7d56eb7b4a0f6d9",
+    "rust/badge.rs": "fb7a2d56b4925da556ded29d3d08becb6de4f85f3a379858d064dd0514c37019",
+    "rust/button.rs": "bee84773b4b077b15d6c3db42c37a98a213366c9516cb0285fb7eea2320c6534",
+    "rust/card.rs": "179b4745e6e380ef0bf822c46eaff5570ef62f77681ef02e10158b35e34a15c8",
+    "rust/empty.rs": "9c5d32d4c74499bea34b553bb6932e98c03f65ce45d7144c6d3c0ec4b0758270",
+    "rust/mascot.rs": "9b9d836a6c8f106df405705ff4502bd3198231e215fc7a4ef7409b3ac9a1e132",
+    "rust/navigation.rs": "a1e5eef6c2d72cc563530868a24603e74dbf2cadf2be3b8bc2187fbf152a446f",
+    "rust/status.rs": "ae3557bc90217ed2f73f9b57a28167ec30a9db7e482da2dadef59f8b4b57989b",
+    "rust/toggle.rs": "b6dd96a1cc6e383a8d3a9809aac30bdc214aa5d1271354f4a37ebe73d4a1c42a",
+    "gull.svg": "0b0c97ab79242efa33c7092227fda8a4b457d202d26012479fbc8a040f1369a8"
+  },
+  "vendored_sha256": {
+    "rust/lib.rs": "465041939ab7c4e47013adf9fded25f07f24e26095b923f7212bf247b3ec0604",
+    "palette.json": "2e36af1fcec4148e4e3029ed2e5c576769171ee183fee690c7d56eb7b4a0f6d9",
+    "rust/badge.rs": "fb7a2d56b4925da556ded29d3d08becb6de4f85f3a379858d064dd0514c37019",
+    "rust/button.rs": "bee84773b4b077b15d6c3db42c37a98a213366c9516cb0285fb7eea2320c6534",
+    "rust/card.rs": "179b4745e6e380ef0bf822c46eaff5570ef62f77681ef02e10158b35e34a15c8",
+    "rust/empty.rs": "9c5d32d4c74499bea34b553bb6932e98c03f65ce45d7144c6d3c0ec4b0758270",
+    "rust/mascot.rs": "9b9d836a6c8f106df405705ff4502bd3198231e215fc7a4ef7409b3ac9a1e132",
+    "rust/navigation.rs": "a1e5eef6c2d72cc563530868a24603e74dbf2cadf2be3b8bc2187fbf152a446f",
+    "rust/status.rs": "ae3557bc90217ed2f73f9b57a28167ec30a9db7e482da2dadef59f8b4b57989b",
+    "rust/toggle.rs": "b6dd96a1cc6e383a8d3a9809aac30bdc214aa5d1271354f4a37ebe73d4a1c42a",
+    "gull.svg": "0b0c97ab79242efa33c7092227fda8a4b457d202d26012479fbc8a040f1369a8"
+  }
+}

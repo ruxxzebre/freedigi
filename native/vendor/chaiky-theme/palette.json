@@ -1,0 +1,113 @@
+{
+  "font": "ui-rounded, 'SF Pro Rounded', 'Nunito', system-ui, sans-serif",
+  "light": {
+    "page": "#faf7ff",
+    "surface": "#fffdfd",
+    "soft": "#f0e8fa",
+    "ink": "#443650",
+    "muted": "#776581",
+    "accent": "#7950a6",
+    "on-accent": "#faf7ff",
+    "visited": "#9a4874",
+    "line": "#e2d5ee",
+    "glow": "#eadcf7",
+    "peach": "#fae8e6",
+    "success": "#2e7a57",
+    "warning": "#94590f",
+    "danger": "#b03c45",
+    "info": "#58679a",
+    "scrim": "rgb(68 54 80 / 0.35)",
+    "shadow": "0 8px 30px #68448812",
+    "shadow-float": "0 16px 40px #6844882e"
+  },
+  "dark": {
+    "page": "#201b29",
+    "surface": "#292232",
+    "soft": "#382c44",
+    "ink": "#eee4f6",
+    "muted": "#baabc8",
+    "accent": "#ceb0f1",
+    "on-accent": "#201b29",
+    "visited": "#e6afcc",
+    "line": "#493956",
+    "glow": "#392849",
+    "peach": "#3c2937",
+    "success": "#9dd5b3",
+    "warning": "#ecc48f",
+    "danger": "#f2a6a6",
+    "info": "#b2bbe0",
+    "scrim": "rgb(0 0 0 / 0.6)",
+    "shadow": "0 8px 30px #0002",
+    "shadow-float": "0 16px 40px #0007"
+  },
+  "terminal": {
+    "black": "#292232",
+    "red": "#f2a6a6",
+    "green": "#9dd5b3",
+    "yellow": "#ecc48f",
+    "blue": "#b2bbe0",
+    "magenta": "#ceb0f1",
+    "cyan": "#a6d8dc",
+    "white": "#eee4f6",
+    "brightBlack": "#8a7a9a",
+    "brightRed": "#f7c0c0",
+    "brightGreen": "#b9e4c9",
+    "brightYellow": "#f3d6ae",
+    "brightBlue": "#cbd2ee",
+    "brightMagenta": "#e0caf7",
+    "brightCyan": "#c2e6e9",
+    "brightWhite": "#ffffff"
+  },
+  "seasons": {
+    "spring": {
+      "light": {
+        "glow": "#e4efdc",
+        "peach": "#fbe4ee"
+      },
+      "dark": {
+        "glow": "#2b3a31",
+        "peach": "#3d2a38"
+      }
+    },
+    "summer": {
+      "light": {
+        "glow": "#faeccd",
+        "peach": "#fde3d6"
+      },
+      "dark": {
+        "glow": "#3c3425",
+        "peach": "#40302a"
+      }
+    },
+    "autumn": {
+      "light": {
+        "glow": "#f5e1cc",
+        "peach": "#f3dcd3"
+      },
+      "dark": {
+        "glow": "#3d2f26",
+        "peach": "#3a2a2b"
+      }
+    },
+    "winter": {
+      "light": {
+        "glow": "#dfe7f7",
+        "peach": "#ece6f7"
+      },
+      "dark": {
+        "glow": "#26304a",
+        "peach": "#2f2b45"
+      }
+    },
+    "holidays": {
+      "light": {
+        "glow": "#f6dde1",
+        "peach": "#dcefe3"
+      },
+      "dark": {
+        "glow": "#452a31",
+        "peach": "#243a2e"
+      }
+    }
+  }
+}

@@ -1,15 +1,15 @@
 # FreeDigi
 
-A desktop controller app for **Linux and macOS**, built with Wails and React.
+A desktop controller app for **Linux and macOS**, built with **Rust + egui (Glow/OpenGL)**.
 Configure your Flydigi Vader 5 Pro, inspect live inputs, and see exactly what the app is doing.
 
 **Based on [ControlLab](https://github.com/dracinn/ControlLab), the original Swift controller app by dracinn.** FreeDigi reuses its controller protocol implementation and tests. The original MIT copyright and license are preserved, and the app includes an About credit. See [NOTICE](NOTICE) and [LICENSE](LICENSE).
 
-![FreeDigi overview](docs/freedigi-overview.png)
+![FreeDigi overview](docs/freedigi-native-overview.png)
 
 ## Status
 
-This is an early desktop preview. The Linux executable builds and the portable protocol, service-boundary and browser interaction tests pass. **The new Linux transport has not yet been tested against a physical controller.** The macOS transport adapts the original ControlLab IOKit session; a FreeDigi macOS build must be run and verified on a Mac.
+This is an early desktop preview. The Linux executable builds and the portable protocol and native state/safety tests pass. **The new Linux transport has not yet been tested against a physical controller.** The macOS transport adapts the original ControlLab IOKit session; a FreeDigi macOS build must be run and verified on a Mac.
 
 - Live physical input monitor, including the extra face and back buttons.
 - Read active profile; edit single-button mappings; temporary apply or persistent save.
@@ -27,12 +27,14 @@ The original Swift app and its existing features remain available in this reposi
 
 ## Download and build
 
-See [Releases](https://github.com/ruxxzebre/freedigi/releases) for available builds, and [desktop/README.md](desktop/README.md) for installation, dependencies and local builds.
+The `v0.1.0-preview` release is the older Wails build. The native egui interface is in `main`; native packages are produced by the updated workflows.
+
+See [Releases](https://github.com/ruxxzebre/freedigi/releases) for available builds, and [native/README.md](native/README.md) for installation, dependencies and local builds.
 
 ```sh
 git clone https://github.com/ruxxzebre/freedigi.git
 cd freedigi
-./desktop/scripts/build.sh
+./native/scripts/build.sh
 ```
 
 Linux builds run on a GitHub Ubuntu runner. macOS builds are manually triggered on the owner's self-hosted Mac; [runner setup](docs/freedigi-mac-runner.md).
@@ -40,12 +42,22 @@ Linux builds run on a GitHub Ubuntu runner. macOS builds are manually triggered 
 ## Architecture
 
 ```text
-React interface → Wails / Go operation coordinator → Swift command service
+egui interface → Rust operation worker → Swift command service
                                                     ├─ Linux: hidraw
                                                     └─ macOS: IOKit
 ```
 
-The protocol stays in Swift to preserve ControlLab's tested behavior. The Go layer owns device selection, dry-run state, cached snapshots and process lifetimes. It pauses the input stream during configuration operations and resumes it afterward. The helper exits after each operation; monitoring keeps one helper alive. No background daemon or paid dependency is needed.
+The protocol stays in Swift to preserve ControlLab's tested behavior. The Rust worker owns device selection, dry-run state, cached snapshots and process lifetimes. It pauses the input stream during configuration operations and resumes it afterward. The helper exits after each operation; monitoring keeps one helper alive. No background daemon or paid dependency is needed.
+
+The Chaiky gull, palette and **only explicitly selected Rust components** are
+vendored under `native/vendor/chaiky-theme`. Cargo default features are disabled;
+new upstream components are not copied automatically. See the
+[native theme update instructions](native/README.md#shared-theme-selectively-vendored).
+The previous Wails interface remains in `desktop/`.
+
+Use `nix develop` for the pinned Rust tools and Linux graphics libraries.
+`flake.lock` uses the same nixpkgs revision as Chaiky/Core; `native/Cargo.lock`
+pins crates. Swift 6 remains an external toolchain (6.0.3 on Linux, Xcode on Mac).
 
 [Validation and known limits](docs/freedigi-validation.md) documents what has actually been tested.
 

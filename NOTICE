@@ -9,3 +9,7 @@ Dependency license texts accompany packaged builds in THIRD_PARTY_NOTICES.txt.
 The Flydigi controller image is retained from the original application's
 resources. Flydigi product names, logos and controller imagery belong to
 their respective owners; their inclusion does not imply endorsement.
+
+The native Rust interface includes selected components, palette and gull artwork
+from the Chaiky project / Core shared theme. Source revision and file hashes are
+recorded in native/vendor/chaiky-theme/PROVENANCE.json.

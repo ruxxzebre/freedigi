@@ -8,8 +8,25 @@ The macOS workflow uses your own laptop, with the standard runner labels `self-h
 4. Open [Actions → FreeDigi macOS](https://github.com/ruxxzebre/freedigi/actions/workflows/freedigi-macos.yml), choose **Run workflow**, select **main**, then run it.
 5. Open the completed run and download **FreeDigi-macos** from Artifacts. Extract the artifact, then extract `FreeDigi-macos-arm64.zip`. Move `FreeDigi.app` into Applications and launch it.
 
-Xcode with Swift 6+ must already be installed and selected on the laptop. The workflow sets up Go and Node in the runner environment, runs tests, builds both the interface and helper, and ad-hoc signs the resulting app. It does not require a paid signing account, and does not request virtual-HID entitlements.
+Xcode with Swift 6+ must already be installed and selected on the laptop. The workflow sets up pinned Rust 1.97.0 in the runner environment, runs tests, builds both the interface and helper, and ad-hoc signs the resulting app. It does not require a paid signing account, and does not request virtual-HID entitlements.
 
 Use the workflow on the reviewed `main` branch only. A self-hosted runner executes repository code as your logged-in user. Do not enable public pull-request jobs on this laptop. Stop `./run.sh` with Ctrl-C when you are finished.
 
 The workflow uploads the archive as a GitHub Actions artifact; it does not automatically publish a release. Linux builds use a separate GitHub-hosted Ubuntu runner.
+
+## Build directly without a runner
+
+Install Rust (the workflow uses 1.97.0) and select Xcode with Swift 6+. Then:
+
+```sh
+git clone https://github.com/ruxxzebre/freedigi.git ~/Developer/FreeDigi
+cd ~/Developer/FreeDigi
+./native/scripts/build.sh
+unzip -q native/dist/FreeDigi-macos-arm64.zip -d native/dist/macos
+open native/dist/macos/FreeDigi.app
+```
+
+If the directory already contains your FreeDigi checkout, use `git pull --ff-only`
+in it instead of cloning. An Intel Mac produces `FreeDigi-macos-amd64.zip`.
+No Xcode project/scheme selection or developer account is required for this build.
+The script ad-hoc signs the app; this does not grant virtual gamepad entitlements.
