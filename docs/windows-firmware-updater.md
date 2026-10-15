@@ -9,14 +9,17 @@ The Electron application sends a JSON `POST` request to:
 
 `https://api.flydigi.com/pc/Update/firmware`
 
-For a standard Vader 5 Pro, the identifying values are `device_code = k5`,
-`device_id = 128`, VID `37d7`, and PID `2401`. The request includes the current
+For a standard Vader 5 Pro, the identifying values are `device_code = f5`,
+`device_id = 130` (variants 144/145 use their reported IDs). The request includes the current
 main, RF, SI, and dongle versions. `Vader5FirmwareUpdateClient` implements this
 request and response format.
 
-Using versions read live from the attached controller over USB on 2026-07-21
+Historical queries incorrectly used `k5 / 128`, which identifies Apex 5.
+Those results must not be used to select Vader firmware or infer Vader chip types.
+Using versions recorded on 2026-07-21
 (main `7.1.5.2`, RF `1.0.2.6`, SI `3.5.1.7`, dongle `0.4.6.7`), the service
-reported that main and SI were current. A refreshed catalog snapshot on
+offered no main or SI package; that does not establish they were current.
+A refreshed catalog snapshot for the same incorrect `k5 / 128` query on
 2026-07-22 offered:
 
 - Dongle `2.1.3.1`: `K5_BS20_Dongle_V2131_DFU.fwpkg`
@@ -36,7 +39,10 @@ backend from the chip type:
 - FREQ: screen OTA updater
 - Jieli: JieLi updater
 
-The available Vader 5 RF and dongle packages are BS20/NearLink `.fwpkg` files.
+The historical Apex 5 RF and dongle packages are BS20/NearLink `.fwpkg` files.
+Vader 5 Pro's recovered `f5` chip table instead selects Megahunt for main,
+Telink for RF/receiver and Jieli for SI. See the Engine 5.0.1.6 recovery notes;
+physical bootloader compatibility still needs validation.
 The Windows backend invokes its bundled tool in this form:
 
 `BurnTool.exe -dfu -pid:0xPID -vid:0xVID -usage:0x1 -usagepage:0xUSAGE -bin:PACKAGE`

@@ -26,19 +26,28 @@ public struct Vader5PreparedFirmware: Sendable {
     fileprivate let image: Data
 }
 
+public struct Vader5FirmwareDeviceInfo: Sendable {
+    public let identity: ControllerIdentity
+    public let versions: Vader5FirmwareVersions
+    let location: UInt32
+}
+
 /// Live firmware flow: identify -> official catalog -> download -> validate ->
 /// re-identify -> bootloader -> transfer -> normal identity/version verification.
 /// There is deliberately no entry point for flashing an arbitrary local file.
 public enum Vader5FirmwareInstaller {
     private static let appVersion = "4.2.0.9"
 
-    private struct DeviceInfo: Sendable {
-        let identity: ControllerIdentity
-        let versions: Vader5FirmwareVersions
-        let location: UInt32
+    public static func readDeviceInfo() throws -> Vader5FirmwareDeviceInfo {
+        try ControllerDiagnostics.shared.perform("Read firmware inventory") {
+            let info = try readInfo(ControllerHIDSession())
+            ControllerDiagnostics.shared.record("Firmware inventory", stage: "read",
+                message: "Device ID: \(info.identity.deviceID); connection: \(info.identity.connection); versions: \(info.versions).")
+            return info
+        }
     }
 
-    private static func readInfo(_ channel: ControllerHIDSession) throws -> DeviceInfo {
+    private static func readInfo(_ channel: ControllerHIDSession) throws -> Vader5FirmwareDeviceInfo {
         try channel.send(ControllerCommand.frame(1))
         let deadline = ProcessInfo.processInfo.systemUptime + 3
         while ProcessInfo.processInfo.systemUptime < deadline {
@@ -49,7 +58,7 @@ public enum Vader5FirmwareInstaller {
             guard let location = channel.locationID, location != 0 else {
                 throw ControllerProtocolError.invalid("USB location is unavailable; cannot bind an update to this device.")
             }
-            return DeviceInfo(identity: identity, versions: versions, location: location)
+            return Vader5FirmwareDeviceInfo(identity: identity, versions: versions, location: location)
         }
         throw ControllerProtocolError.timeout
     }
@@ -82,9 +91,10 @@ public enum Vader5FirmwareInstaller {
         }
         let catalog = try await Vader5FirmwareUpdateClient().check(versions: device.versions,
             appVersion: appVersion, deviceID: Int(device.identity.deviceID))
-        guard let release = module.release(in: catalog), release.version != current else {
-            throw ControllerProtocolError.invalid("The official catalog offers no different \(module.rawValue) version for this device.")
+        guard let release = module.release(in: catalog) else {
+            throw ControllerProtocolError.invalid("The catalog offered no \(module.rawValue) package for this query. This does not establish that the device is up to date.")
         }
+        try FirmwareVersionPolicy.requireUpgrade(offered: release.version, installed: current)
         guard release.minimumAppVersion.isEmpty || release.minimumAppVersion.compare(appVersion, options: .numeric) != .orderedDescending else {
             throw ControllerProtocolError.invalid("This firmware requires a newer catalog client (\(release.minimumAppVersion)).")
         }

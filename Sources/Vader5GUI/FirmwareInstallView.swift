@@ -15,6 +15,7 @@ struct FirmwareInstallView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Firmware updates").font(.title2.bold())
+                FirmwareCatalogView(bridge: bridge)
                 Text(message).foregroundStyle(.secondary)
                 Picker("Chip", selection: $module) {
                     Text("Controller main").tag(Vader5FirmwareModule.main)
@@ -54,14 +55,17 @@ struct FirmwareInstallView: View {
 
     private func prepare() {
         guard !bridge.operationInProgress else { return }
-        bridge.pauseMonitoringForDeviceAccess()
+        let resumeMonitoring = bridge.pauseMonitoringForDeviceAccess()
         bridge.deviceBusy = true
         prepared = nil
         error = nil
         progress = 0
         let module = self.module
         Task {
-            defer { bridge.deviceBusy = false }
+            defer {
+                bridge.deviceBusy = false
+                bridge.resumeMonitoringAfterDeviceAccess(ifNeeded: resumeMonitoring)
+            }
             do {
                 prepared = try await Vader5FirmwareInstaller.prepare(module: module)
                 message = "Official update downloaded for this device. Review it before installing."

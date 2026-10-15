@@ -280,10 +280,14 @@ start/stop command, while the current web UI uses a newer protocol and additiona
 readiness indicators. The correct Vader 5 workflow and completion verification
 still need validation. Advanced curves, gyro and macro editing remain drafts.
 
-The requested Wails/React rewrite is deferred until backend feature work and
-validation are complete. No replacement frontend agent has been started. Keep
-native HID timing/firmware work behind a stable backend interface when that phase
-begins; do not move report forwarding onto the web UI thread.
+On October 15 the user selected firmware updates followed by Wails/React as the
+next sequence; unrelated unfinished features do not gate the UI migration.
+No replacement frontend agent has been started. Keep native HID timing/firmware
+work behind a stable backend interface when that phase begins; do not move report
+forwarding onto the web UI thread. The user confirmed Turbo Apply works and
+deferred highlighting investigation; preserve the existing highlighting code.
+The user is playing and does not want controller tests now. Continue offline
+work; leave actual update/bootloader validation pending until they are ready.
 
 For the next Mac check: click the empty/right side of each sidebar row; read a
 profile; stage a mapping/restore and preview both temporary and saved writes;
@@ -360,3 +364,23 @@ state. The write is never repeated. A failed recovery remains unverified, with
 both the original timeout and recovery details in Diagnostics. This covers a
 lost acknowledgement or transient verification response; it does not establish
 which response was lost on any particular physical controller.
+
+### Firmware preparation follow-up
+
+The main Firmware screen now displays read-only installed/controller-variant
+information and the official catalog, plus **Copy firmware report**. Both the
+inventory lookup and preparation use the connected device's reported ID;
+variants 144/145 are no longer queried as standard variant 130 by the overview.
+No offered package is labeled “Current” solely because a catalog field is null.
+Matching, newer, older and uncomparable versions have distinct status text.
+Preparation permits only a strictly newer four-component numeric version, before
+any package download or bootloader command. Same-version reinstalls, downgrades
+and unknown version formats are blocked. Read-only checks and preparation resume
+previously active monitoring on completion or failure.
+
+This milestone does not validate physical flashing. Remaining work: verify the
+actual receiver/controller boot interface and USB location, transfer/commit ACKs,
+and normal-mode version after reconnect on a selected device/release; keep Jieli
+`.ufw` and unknown bootloaders explicitly unsupported until recovered and tested.
+Proceed to Wails/React after the supported firmware workflow is validated, with
+those unsupported cases clearly represented rather than claimed as finished.
